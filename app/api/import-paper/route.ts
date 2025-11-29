@@ -48,8 +48,12 @@ export async function POST(request: Request) {
     const questions = extractQuestions(text)
 
     if (questions.length === 0) {
+      console.log('Parsed Text Sample:', text.substring(0, 1000)) // Log to server console
       return NextResponse.json(
-        { error: '未能从文档中提取到题目，请检查文档格式' },
+        { 
+            error: '未能从文档中提取到题目。',
+            debug_text: text.substring(0, 800) // Return raw text to client for debugging
+        },
         { status: 400 }
       )
     }
