@@ -37,7 +37,6 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(arrayBuffer)
 
     // 使用 mammoth 解析 Word 文档
-    // 注意：mammoth 接受 buffer 作为 path 或 arrayBuffer 选项
     const result = await mammoth.extractRawText({ buffer })
     const text = result.value
 
@@ -85,9 +84,9 @@ export async function POST(request: Request) {
       content: q.content,
       options: q.options,
       correct_answer: q.correctAnswer || null,
-      analysis: null,
+      analysis: q.analysis || null,
       meta: {
-        kps: [], // 将在下一步填充
+        kps: q.knowledgeCodes.length > 0 ? q.knowledgeCodes : [], // 优先使用解析提取的知识点
       },
     }))
 
@@ -113,26 +112,31 @@ export async function POST(request: Request) {
 
     createdQuestions.forEach((question, index) => {
       const originalQuestion = questions[index]
-      const knowledge = extractKnowledgeFromQuestion(originalQuestion)
+      // 如果题目解析里已经有知识点了，优先使用
+      const knowledgeCodes = originalQuestion.knowledgeCodes.length > 0 
+        ? originalQuestion.knowledgeCodes 
+        : extractKnowledgeFromQuestion(originalQuestion).knowledgeCodes
 
-      knowledge.knowledgeCodes.forEach((code) => {
+      knowledgeCodes.forEach((code) => {
         edgesToInsert.push({
           question_id: question.id,
           knowledge_code: code,
-          weight: knowledge.confidence,
+          weight: 0.8, // 默认权重
           dimension: 'application',
         })
       })
-
-      // 更新题目的 meta 字段
-      supabase
-        .from('questions')
-        .update({
-          meta: {
-            kps: knowledge.knowledgeCodes,
-          },
-        })
-        .eq('id', question.id)
+      
+      // 确保 meta 里存了 knowledgeCodes
+      if (originalQuestion.knowledgeCodes.length === 0 && knowledgeCodes.length > 0) {
+          supabase
+            .from('questions')
+            .update({
+              meta: {
+                kps: knowledgeCodes,
+              },
+            })
+            .eq('id', question.id)
+      }
     })
 
     // 批量插入内容-知识边
@@ -174,6 +178,8 @@ interface ParsedQuestion {
   content: string
   options: string[]
   correctAnswer?: string
+  analysis?: string
+  knowledgeCodes: string[]
   sectionType: 'single_choice' | 'cloze' | 'reading' | 'writing'
   orderIndex: number
 }
@@ -219,38 +225,134 @@ function extractMetadata(text: string): { year?: number; region?: string } {
 function extractQuestions(text: string): ParsedQuestion[] {
   const questions: ParsedQuestion[] = []
 
-  // 匹配题目的正则表达式
-  // 格式：1. 题干内容 A. 选项A B. 选项B C. 选项C D. 选项D
-  const questionPattern =
-    /(\d+)\.\s*([^A-Z]+?)\s*(A\.\s*[^\n]+)\s*(B\.\s*[^\n]+)\s*(C\.\s*[^\n]+)\s*(D\.\s*[^\n]+)/g
-
-  let match
+  // 分割题目块
+  // 策略：使用数字加点或顿号作为题目开始的标志
+  // 比如 "1." 或 "1、"
+  // 同时利用【答案】等标签来辅助定位
+  const rawBlocks = text.split(/(?=\d+[\.、]\s*（?\d*\.?\d*\s*分）?)/g)
+  
   let orderIndex = 0
 
-  while ((match = questionPattern.exec(text)) !== null) {
-    const number = match[1]
-    const content = match[2].trim()
-    const options = [
-      match[3].replace(/^A\.\s*/, '').trim(),
-      match[4].replace(/^B\.\s*/, '').trim(),
-      match[5].replace(/^C\.\s*/, '').trim(),
-      match[6].replace(/^D\.\s*/, '').trim(),
-    ]
+  for (const block of rawBlocks) {
+    // 过滤掉太短的块或者不是题目的块
+    if (block.length < 10 || !block.match(/^\d+[\.、]/)) {
+        continue
+    }
 
-    questions.push({
-      number,
-      content,
-      options,
-      sectionType: 'single_choice',
-      orderIndex: orderIndex++,
-    })
+    try {
+        // 1. 提取题号和分数
+        const headerMatch = block.match(/^(\d+)[\.、]\s*(?:（(\d*\.?\d*)\s*分）)?\s*/)
+        if (!headerMatch) continue
+        
+        const number = headerMatch[1]
+        const rawContent = block.substring(headerMatch[0].length)
+
+        // 2. 提取答案、解析、知识点
+        let correctAnswer: string | undefined
+        let analysis: string | undefined
+        let knowledgeStr: string | undefined
+        let contentAndOptions = rawContent
+
+        // 提取【答案】
+        const answerMatch = rawContent.match(/【答案】\s*([A-D])/)
+        if (answerMatch) {
+            correctAnswer = answerMatch[1]
+            // 从内容中移除答案部分
+            contentAndOptions = contentAndOptions.replace(/【答案】\s*[A-D]/, '')
+        }
+
+        // 提取【解析】
+        const analysisMatch = rawContent.match(/【解析】([\s\S]*?)(?=【|$)/)
+        if (analysisMatch) {
+             // 如果有【分析】子标签，也包含进去
+             analysis = analysisMatch[1].trim()
+             contentAndOptions = contentAndOptions.replace(analysisMatch[0], '')
+        }
+
+        // 提取【知识点】
+        const knowledgeMatch = rawContent.match(/【知识点】([\s\S]*?)(?=【|$)/)
+        if (knowledgeMatch) {
+            knowledgeStr = knowledgeMatch[1].trim()
+            contentAndOptions = contentAndOptions.replace(knowledgeMatch[0], '')
+        }
+        
+        // 清理其他可能的标签，如【点评】
+        contentAndOptions = contentAndOptions.replace(/【[^】]+】[\s\S]*?(?=【|$)/g, '')
+
+        // 3. 分离题干和选项
+        // 寻找选项 A. B. C. D.
+        // 选项可能有多种排版：
+        // A. xxx B. xxx
+        // A. xxx
+        // B. xxx
+        
+        // 查找第一个选项 A. 的位置
+        const optionAIndex = contentAndOptions.search(/\sA[\.\s]/)
+        
+        let content = ''
+        let options: string[] = []
+
+        if (optionAIndex !== -1) {
+            content = contentAndOptions.substring(0, optionAIndex).trim()
+            const optionsPart = contentAndOptions.substring(optionAIndex)
+            
+            // 提取选项
+            // 简单的分割策略：按 A., B., C., D. 分割
+            const optionMatches = [
+                optionsPart.match(/A[\.\s]([\s\S]*?)(?=B[\.\s]|$)/),
+                optionsPart.match(/B[\.\s]([\s\S]*?)(?=C[\.\s]|$)/),
+                optionsPart.match(/C[\.\s]([\s\S]*?)(?=D[\.\s]|$)/),
+                optionsPart.match(/D[\.\s]([\s\S]*?)$/)
+            ]
+
+            if (optionMatches[0] && optionMatches[1] && optionMatches[2] && optionMatches[3]) {
+                options = [
+                    optionMatches[0][1].trim(),
+                    optionMatches[1][1].trim(),
+                    optionMatches[2][1].trim(),
+                    optionMatches[3][1].trim()
+                ]
+            }
+        } else {
+            // 没找到选项，可能是非选择题或者格式极度不规范
+            content = contentAndOptions.trim()
+        }
+
+        // 处理知识点字符串转 code
+        const knowledgeCodes: string[] = []
+        if (knowledgeStr) {
+            // 简单的关键词映射，实际项目中可能需要更复杂的 NLP
+            if (knowledgeStr.includes('代词')) knowledgeCodes.push('grammar.pronoun')
+            if (knowledgeStr.includes('时态')) knowledgeCodes.push('grammar.tense')
+            if (knowledgeStr.includes('被动')) knowledgeCodes.push('grammar.passive')
+            if (knowledgeStr.includes('情态')) knowledgeCodes.push('grammar.modal')
+            if (knowledgeStr.includes('形容词')) knowledgeCodes.push('grammar.adjective')
+             // ... 更多映射
+        }
+
+        if (options.length === 4) {
+             questions.push({
+                number,
+                content,
+                options,
+                correctAnswer,
+                analysis,
+                knowledgeCodes,
+                sectionType: 'single_choice',
+                orderIndex: orderIndex++,
+            })
+        }
+
+    } catch (e) {
+        console.warn(`Error parsing block: ${block.substring(0, 20)}...`, e)
+    }
   }
 
   return questions
 }
 
 /**
- * 从题目内容中提取知识点
+ * 兜底逻辑：从题目内容中提取知识点
  */
 function extractKnowledgeFromQuestion(question: ParsedQuestion): {
   knowledgeCodes: string[]
@@ -265,57 +367,29 @@ function extractKnowledgeFromQuestion(question: ParsedQuestion): {
   // 关键词匹配规则
   const rules = [
     {
-      keywords: [
-        'i',
-        'you',
-        'he',
-        'she',
-        'we',
-        'they',
-        'my',
-        'your',
-        'his',
-        'her',
-        'our',
-        'their',
-      ],
-      knowledgeCode: 'grammar.pronoun.subject',
+      keywords: ['i', 'you', 'he', 'she', 'it', 'we', 'they', 'my', 'your', 'his', 'her'],
+      knowledgeCode: 'grammar.pronoun',
       confidence: 0.8,
     },
     {
-      keywords: ['is spoken', 'was spoken', 'be done', 'be made', 'be used'],
+      keywords: ['is spoken', 'was spoken', 'be done', 'be made'],
       knowledgeCode: 'grammar.passive',
       confidence: 0.9,
     },
     {
-      keywords: ['yesterday', 'last week', 'last year', 'ago', 'was', 'were', 'did'],
+      keywords: ['yesterday', 'ago', 'last', 'was', 'were', 'did'],
       knowledgeCode: 'grammar.tense.past',
       confidence: 0.8,
     },
     {
-      keywords: ['will', 'going to', 'next week', 'next year', 'tomorrow'],
+      keywords: ['will', 'going to', 'tomorrow', 'next'],
       knowledgeCode: 'grammar.tense.future',
       confidence: 0.8,
     },
-    {
-      keywords: ['every day', 'often', 'usually', 'always', 'sometimes'],
-      knowledgeCode: 'grammar.tense.present',
-      confidence: 0.7,
-    },
-    {
-      keywords: ['confident', 'ambition', 'strategy', 'achieve'],
-      knowledgeCode: 'vocab.level3',
-      confidence: 0.6,
-    },
-    {
-      keywords: ['interesting', 'interested', 'excited', 'exciting'],
-      knowledgeCode: 'vocab.level2',
-      confidence: 0.6,
-    },
-    {
-      keywords: ['read', 'understand', 'passage', 'article', 'text'],
-      knowledgeCode: 'logic.reading',
-      confidence: 0.7,
+     {
+      keywords: ['can', 'could', 'may', 'must', 'should', 'need'],
+      knowledgeCode: 'grammar.modal',
+      confidence: 0.8,
     },
   ]
 
@@ -329,14 +403,13 @@ function extractKnowledgeFromQuestion(question: ParsedQuestion): {
     }
   }
 
-  // 如果没有匹配到，返回通用知识点
   if (knowledgeCodes.length === 0) {
-    knowledgeCodes.push('vocab.level2')
+    knowledgeCodes.push('vocab.general')
     confidence = 0.3
   }
 
   return {
-    knowledgeCodes: [...new Set(knowledgeCodes)], // 去重
+    knowledgeCodes: [...new Set(knowledgeCodes)],
     confidence,
   }
 }
