@@ -47,6 +47,26 @@ export async function POST(request: Request) {
     // 提取题目
     const questions = extractQuestions(text)
 
+    // FORCE DEBUG MODE: Always return debug text even on success
+    // 临时修改：为了调试漏题，即使成功也返回 debug_text
+    if (questions.length > 0) {
+         console.log(`Extracted ${questions.length} questions.`)
+         // 我们只返回后半部分文本，通常漏题都在后面
+         const splitPoint = Math.floor(text.length * 0.4) 
+         return NextResponse.json({
+            success: true,
+            message: `成功导入 ${questions.length} 道题目（总共提取到这些）。请查看下方调试文本分析漏题。`,
+            data: {
+                paperId: examPaper.id,
+                paperTitle: examPaper.title,
+                questionsCount: questions.length,
+                knowledgeEdgesCount: edgesToInsert.length,
+            },
+            // 返回后 60% 的文本，通常是阅读理解和完形填空
+            debug_text: "--- DEBUG MODE: SHOWING LAST 60% OF TEXT ---\n" + text.substring(splitPoint)
+         })
+    }
+
     if (questions.length === 0) {
       console.log('Parsed Text Sample:', text.substring(0, 1000)) // Log to server console
       return NextResponse.json(

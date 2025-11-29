@@ -143,11 +143,11 @@ export default function ImportPage() {
               </div>
               <p className="text-sm">{result.message}</p>
               
-              {/* Debug Text Display */}
-              {!result.success && result.debug_text && (
+              {/* Debug Text Display - Always show if present */}
+              {result.debug_text && (
                 <div className="mt-4">
                    <p className="mb-1 text-xs font-semibold text-red-700">解析到的文本片段 (用于调试):</p>
-                   <pre className="max-h-40 overflow-y-auto rounded bg-red-100 p-2 text-xs text-red-900 whitespace-pre-wrap break-all">
+                   <pre className="max-h-60 overflow-y-auto rounded bg-red-100 p-2 text-xs text-red-900 whitespace-pre-wrap break-all">
                      {result.debug_text}
                    </pre>
                    <p className="mt-1 text-xs text-red-600">请复制以上内容反馈给开发者</p>
