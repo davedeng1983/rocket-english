@@ -34,9 +34,11 @@ export async function POST(request: Request) {
 
     // 读取文件内容
     const arrayBuffer = await file.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
 
     // 使用 mammoth 解析 Word 文档
-    const result = await mammoth.extractRawText({ arrayBuffer })
+    // 注意：mammoth 接受 buffer 作为 path 或 arrayBuffer 选项
+    const result = await mammoth.extractRawText({ buffer })
     const text = result.value
 
     // 提取试卷信息
