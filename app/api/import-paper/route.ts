@@ -229,23 +229,24 @@ function extractMetadata(text: string): { year?: number; region?: string } {
 function extractQuestions(text: string): ParsedQuestion[] {
   const questions: ParsedQuestion[] = []
 
-  // 分割题目块
-  // 策略：使用数字加点或顿号作为题目开始的标志
-  // 比如 "1." 或 "1、"
-  // 同时利用【答案】等标签来辅助定位
-  const rawBlocks = text.split(/(?=\d+[\.、]\s*（?\d*\.?\d*\s*分）?)/g)
+  // 关键修复：支持全角点 "．" 和全角括号 "（）" 以及多变的空白字符
+  // 目标格式：1．（0.5分） My sister...
+  const questionSplitPattern = /(?=\d+[.．、]\s*[（(]?\s*\d*\.?\d*\s*分?[）)]?)/g
+  
+  const rawBlocks = text.split(questionSplitPattern)
   
   let orderIndex = 0
 
   for (const block of rawBlocks) {
-    // 过滤掉太短的块或者不是题目的块
-    if (block.length < 10 || !block.match(/^\d+[\.、]/)) {
+    // 过滤掉太短的块
+    if (block.length < 10 || !block.match(/^\d+[.．、]/)) {
         continue
     }
 
     try {
         // 1. 提取题号和分数
-        const headerMatch = block.match(/^(\d+)[\.、]\s*(?:（(\d*\.?\d*)\s*分）)?\s*/)
+        // 关键修复：更宽容的正则
+        const headerMatch = block.match(/^(\d+)[.．、]\s*(?:[（(](\d*\.?\d*)\s*分?[）)])?\s*/)
         if (!headerMatch) continue
         
         const number = headerMatch[1]
@@ -268,7 +269,6 @@ function extractQuestions(text: string): ParsedQuestion[] {
         // 提取【解析】
         const analysisMatch = rawContent.match(/【解析】([\s\S]*?)(?=【|$)/)
         if (analysisMatch) {
-             // 如果有【分析】子标签，也包含进去
              analysis = analysisMatch[1].trim()
              contentAndOptions = contentAndOptions.replace(analysisMatch[0], '')
         }
@@ -280,18 +280,15 @@ function extractQuestions(text: string): ParsedQuestion[] {
             contentAndOptions = contentAndOptions.replace(knowledgeMatch[0], '')
         }
         
-        // 清理其他可能的标签，如【点评】
+        // 清理其他标签
         contentAndOptions = contentAndOptions.replace(/【[^】]+】[\s\S]*?(?=【|$)/g, '')
 
         // 3. 分离题干和选项
-        // 寻找选项 A. B. C. D.
-        // 选项可能有多种排版：
-        // A. xxx B. xxx
-        // A. xxx
-        // B. xxx
+        // 关键修复：支持 A．I	B．He (全角点 + Tab/空格)
+        // 正则说明：匹配 A, B, C, D 后面跟 . 或 ． 或 、，然后是内容
         
-        // 查找第一个选项 A. 的位置
-        const optionAIndex = contentAndOptions.search(/\sA[\.\s]/)
+        // 先找到第一个选项的位置 (A. 或 A． 或 A、)
+        const optionAIndex = contentAndOptions.search(/\sA[.．、]/)
         
         let content = ''
         let options: string[] = []
@@ -301,37 +298,48 @@ function extractQuestions(text: string): ParsedQuestion[] {
             const optionsPart = contentAndOptions.substring(optionAIndex)
             
             // 提取选项
-            // 简单的分割策略：按 A., B., C., D. 分割
-            const optionMatches = [
-                optionsPart.match(/A[\.\s]([\s\S]*?)(?=B[\.\s]|$)/),
-                optionsPart.match(/B[\.\s]([\s\S]*?)(?=C[\.\s]|$)/),
-                optionsPart.match(/C[\.\s]([\s\S]*?)(?=D[\.\s]|$)/),
-                optionsPart.match(/D[\.\s]([\s\S]*?)$/)
-            ]
+            // 分割策略：查找 "B." "C." "D." 并在此处分割
+            // 注意要处理全角点和顿号
+            const optionRegex = /([A-D])[.．、]\s*([^\t\nA-D]+)(?=\s*[B-D][.．、]|$)/g
+            
+            // 由于 JS 的 exec 循环匹配比较麻烦，这里用一种更粗暴有效的方法：
+            // 直接用 split 切割，但要小心把 ABCD 切没了
+            
+            // 尝试用 A.xxx B.xxx 的模式去匹配四项
+            // 这里的正则假设选项是 A, B, C, D 顺序出现的
+            const optionMatches = optionsPart.match(
+                /A[.．、]\s*([\s\S]*?)\s*B[.．、]\s*([\s\S]*?)\s*C[.．、]\s*([\s\S]*?)\s*D[.．、]\s*([\s\S]*?)$/
+            )
 
-            if (optionMatches[0] && optionMatches[1] && optionMatches[2] && optionMatches[3]) {
+            if (optionMatches) {
                 options = [
-                    optionMatches[0][1].trim(),
-                    optionMatches[1][1].trim(),
-                    optionMatches[2][1].trim(),
-                    optionMatches[3][1].trim()
+                    optionMatches[1].trim(),
+                    optionMatches[2].trim(),
+                    optionMatches[3].trim(),
+                    optionMatches[4].trim()
                 ]
+            } else {
+                 // 如果没匹配上，尝试用 split
+                 // 这种方式比较脆弱，但在标准 ABCD 格式下通常有效
+                 const parts = optionsPart.split(/\s*[A-D][.．、]\s*/)
+                 // parts[0] 是空字符串，parts[1] 是 A 的内容，以此类推
+                 if (parts.length >= 5) {
+                     options = [parts[1].trim(), parts[2].trim(), parts[3].trim(), parts[4].trim()]
+                 }
             }
         } else {
-            // 没找到选项，可能是非选择题或者格式极度不规范
             content = contentAndOptions.trim()
         }
 
-        // 处理知识点字符串转 code
+        // 处理知识点
         const knowledgeCodes: string[] = []
         if (knowledgeStr) {
-            // 简单的关键词映射，实际项目中可能需要更复杂的 NLP
             if (knowledgeStr.includes('代词')) knowledgeCodes.push('grammar.pronoun')
             if (knowledgeStr.includes('时态')) knowledgeCodes.push('grammar.tense')
             if (knowledgeStr.includes('被动')) knowledgeCodes.push('grammar.passive')
             if (knowledgeStr.includes('情态')) knowledgeCodes.push('grammar.modal')
             if (knowledgeStr.includes('形容词')) knowledgeCodes.push('grammar.adjective')
-             // ... 更多映射
+            if (knowledgeStr.includes('介词')) knowledgeCodes.push('grammar.preposition')
         }
 
         if (options.length === 4) {
