@@ -47,27 +47,50 @@ export async function POST(request: Request) {
     // 提取题目
     const questions = extractQuestions(text)
 
+    if (questions.length === 0) {
+      console.log('Parsed Text Sample:', text.substring(0, 1000)) // Log to server console
+      return NextResponse.json(
+        { 
+            error: '未能从文档中提取到题目。',
+            debug_text: text.substring(0, 800) // Return raw text to client for debugging
+        },
+        { status: 400 }
+      )
+    }
+
+    // 1. 创建试卷记录
+    const { data: examPaper, error: paperError } = await supabase
+      .from('exam_papers')
+      .insert({
+        title,
+        year: metadata.year,
+        region: metadata.region,
+        structure_map: {
+          sections: [],
+          total_questions: questions.length,
+        },
+      })
+      .select()
+      .single()
+
+    if (paperError || !examPaper) {
+      return NextResponse.json(
+        { error: paperError?.message || 'Failed to create exam paper' },
+        { status: 500 }
+      )
+    }
+
     // FORCE DEBUG MODE: Always return debug text even on success
     // 临时修改：为了调试漏题，即使成功也返回 debug_text
     if (questions.length > 0) {
          console.log(`Extracted ${questions.length} questions.`)
-         // 我们只返回后半部分文本，通常漏题都在后面
          const splitPoint = Math.floor(text.length * 0.4) 
-         return NextResponse.json({
-            success: true,
-            message: `成功导入 ${questions.length} 道题目（总共提取到这些）。请查看下方调试文本分析漏题。`,
-            data: {
-                paperId: examPaper.id,
-                paperTitle: examPaper.title,
-                questionsCount: questions.length,
-                knowledgeEdgesCount: edgesToInsert.length,
-            },
-            // 返回后 60% 的文本，通常是阅读理解和完形填空
-            debug_text: "--- DEBUG MODE: SHOWING LAST 60% OF TEXT ---\n" + text.substring(splitPoint)
-         })
+         // 注意：这里我们实际上不直接返回 response 结束，
+         // 而是继续执行插入逻辑，最后在成功的 response 里附带 debug_text
+         // 所以把这段逻辑移到函数最后
     }
 
-    if (questions.length === 0) {
+    // 2. 批量创建题目
       console.log('Parsed Text Sample:', text.substring(0, 1000)) // Log to server console
       return NextResponse.json(
         { 
@@ -174,15 +197,20 @@ export async function POST(request: Request) {
       }
     }
 
+    // DEBUG MODE: Attach text sample to success response
+    const splitPoint = Math.floor(text.length * 0.4)
+    const debugText = "--- DEBUG MODE: SHOWING LAST 60% OF TEXT ---\n" + text.substring(splitPoint)
+
     return NextResponse.json({
       success: true,
-      message: `成功导入试卷：${title}`,
+      message: `成功导入试卷：${title} (调试模式：已附带文本样本)`,
       data: {
         paperId: examPaper.id,
         paperTitle: examPaper.title,
         questionsCount: createdQuestions.length,
         knowledgeEdgesCount: edgesToInsert.length,
       },
+      debug_text: debugText
     })
   } catch (error: any) {
     console.error('Import error:', error)
