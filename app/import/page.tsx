@@ -12,6 +12,7 @@ export default function ImportPage() {
     success: boolean
     message: string
     data?: any
+    debug_text?: string
   } | null>(null)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -70,6 +71,7 @@ export default function ImportPage() {
         setResult({
           success: false,
           message: data.error || '导入失败',
+          debug_text: data.debug_text,
         })
       }
     } catch (error) {
@@ -140,6 +142,18 @@ export default function ImportPage() {
                 {result.success ? '✅ 导入成功' : '❌ 导入失败'}
               </div>
               <p className="text-sm">{result.message}</p>
+              
+              {/* Debug Text Display */}
+              {!result.success && result.debug_text && (
+                <div className="mt-4">
+                   <p className="mb-1 text-xs font-semibold text-red-700">解析到的文本片段 (用于调试):</p>
+                   <pre className="max-h-40 overflow-y-auto rounded bg-red-100 p-2 text-xs text-red-900 whitespace-pre-wrap break-all">
+                     {result.debug_text}
+                   </pre>
+                   <p className="mt-1 text-xs text-red-600">请复制以上内容反馈给开发者</p>
+                </div>
+              )}
+
               {result.success && result.data && (
                 <div className="mt-3 space-y-1 text-sm">
                   <p>试卷标题：{result.data.paperTitle}</p>
@@ -191,4 +205,3 @@ export default function ImportPage() {
     </div>
   )
 }
-
