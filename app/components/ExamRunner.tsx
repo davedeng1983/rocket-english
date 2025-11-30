@@ -473,6 +473,23 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
                  </div>
             )}
 
+            {/* 题目内容 */}
+            <div className="mb-6 text-lg leading-relaxed text-slate-900 markdown-content">
+               <ReactMarkdown
+                  components={{
+                    img: ({ node, ...props }) => (
+                      <img 
+                        {...props} 
+                        className="my-4 max-h-[400px] max-w-full rounded-lg border border-slate-200 object-contain shadow-sm"
+                      />
+                    ),
+                    p: ({ node, ...props }) => <p className="mb-4" {...props} />
+                  }}
+               >
+                  {currentQuestion.content}
+               </ReactMarkdown>
+            </div>
+
             {/* 选项 */}
             {currentQuestion.options && Array.isArray(currentQuestion.options) ? (
               <div className="space-y-3">

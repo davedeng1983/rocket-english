@@ -38,7 +38,16 @@ export async function POST(request: Request) {
 
     // 使用 mammoth 解析 Word 文档
     // 修改：使用 convertToHtml 以便获取图片
-    const result = await mammoth.convertToHtml({ buffer })
+    const result = await mammoth.convertToHtml({ 
+        buffer,
+        convertImage: mammoth.images.inline((element) => {
+            return element.read("base64").then((imageBuffer) => {
+                return {
+                    src: `data:${element.contentType};base64,${imageBuffer}`,
+                }
+            })
+        }),
+    })
     const html = result.value
     const text = convertHtmlToTextWithImages(html)
 
@@ -200,8 +209,8 @@ interface ParsedQuestion {
 // 将 HTML 转换为 纯文本 + Markdown图片标记
 function convertHtmlToTextWithImages(html: string): string {
     let text = html
-      // 1. 处理图片：转换为 markdown 格式
-      .replace(/<img[^>]+src="([^">]+)"[^>]*>/g, '\n\n![image]($1)\n\n')
+      // 1. 处理图片：转换为 markdown 格式 (支持更宽泛的正则)
+      .replace(/<img\s+[^>]*src=["']([^"']+)["'][^>]*>/gi, '\n\n![image]($1)\n\n')
       // 2. 处理段落和标题：转换为换行
       .replace(/<\/p>/g, '\n\n')
       .replace(/<\/h[1-6]>/g, '\n\n')
