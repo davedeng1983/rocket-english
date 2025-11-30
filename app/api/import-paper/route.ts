@@ -44,19 +44,20 @@ export async function POST(request: Request) {
     const title = extractTitle(text) || file.name.replace(/\.(docx|doc)$/i, '')
     const metadata = extractMetadata(text)
 
-    // 提取题目 (使用新的智能元数据解析器)
-    const questions = extractQuestions(text)
+    // 提取题目 (使用新的智能元数据解析器，带详细日志)
+    const { questions, parsingLog } = extractQuestions(text)
 
-    // 调试模式：即使成功也附带文本样本
+    // 调试模式：即使成功也附带文本样本和解析日志
     const splitPoint = Math.floor(text.length * 0.4)
-    const debugText = "--- DEBUG MODE: SHOWING LAST 60% OF TEXT ---\n" + text.substring(splitPoint)
+    const debugText = "--- PARSING LOG ---\n" + parsingLog.join('\n') + 
+                      "\n\n--- DEBUG MODE: SHOWING LAST 60% OF TEXT ---\n" + text.substring(splitPoint)
 
     if (questions.length === 0) {
       console.log('Parsed Text Sample:', text.substring(0, 1000))
       return NextResponse.json(
         { 
             error: '未能从文档中提取到题目。',
-            debug_text: text.substring(0, 800)
+            debug_text: debugText
         },
         { status: 400 }
       )
@@ -221,9 +222,11 @@ function extractMetadata(text: string): { year?: number; region?: string } {
 
 /**
  * 智能解析器：基于元数据进行目标导向解析
+ * 返回题目数组和解析日志
  */
-function extractQuestions(text: string): ParsedQuestion[] {
+function extractQuestions(text: string): { questions: ParsedQuestion[], parsingLog: string[] } {
   const questions: ParsedQuestion[] = []
+  const parsingLog: string[] = []
   let orderIndex = 0
 
   // 1. 按大题切分模块
@@ -272,10 +275,13 @@ function extractQuestions(text: string): ParsedQuestion[] {
       sections.push({ title: '默认部分', content: text, targetCount: 0 })
   }
 
+  parsingLog.push(`Parsed ${sections.length} sections.`)
+
   // 2. 遍历每个模块
   for (const section of sections) {
     const { title, content, targetCount } = section
     let sectionQuestions: ParsedQuestion[] = []
+    parsingLog.push(`Processing section: "${title}" (Expected: ${targetCount})`)
 
     // 策略分发
     if (title.includes('单项') || title.includes('选择') || title.includes('Grammar')) {
@@ -287,15 +293,14 @@ function extractQuestions(text: string): ParsedQuestion[] {
     } else if (title.includes('阅读表达') || title.includes('任务型阅读')) {
        // 默认尝试严格模式
        sectionQuestions = parseNoOptionBlock(content, orderIndex, 'reading', true)
+       parsingLog.push(`  - Strict mode yielded ${sectionQuestions.length} questions`)
        
-       // 智能熔断与降级：如果严格模式解析出的数量远少于预期（比如预期4题，只解析出0-1题），
-       // 或者解析出的数量为0但预期大于0，则启用宽松模式，但带有连续性检查
+       // 智能熔断与降级：如果严格模式解析出的数量远少于预期
        if ((targetCount > 0 && sectionQuestions.length < targetCount) || (sectionQuestions.length === 0 && targetCount > 0)) {
-           console.warn(`Strict mode yielded too few questions for "${title}". Retrying with loose mode + continuity check.`)
+           parsingLog.push(`  - Falling back to loose mode + continuity check`)
            sectionQuestions = parseNoOptionBlock(content, orderIndex, 'reading', false)
        }
     } else if (title.includes('文段表达') || title.includes('书面表达') || title.includes('写作')) {
-       // 写作通常就一题，严格模式可能太严
        sectionQuestions = parseNoOptionBlock(content, orderIndex, 'writing', true)
        if (sectionQuestions.length === 0) {
             sectionQuestions = parseNoOptionBlock(content, orderIndex, 'writing', false)
@@ -304,23 +309,21 @@ function extractQuestions(text: string): ParsedQuestion[] {
        // 默认策略
        const results = parseStandardBlock(content, orderIndex, 'single_choice')
        if (results.length === 0) {
-           // 如果没解析出带选项的题，试试无选项的（严格模式）
            sectionQuestions = parseNoOptionBlock(content, orderIndex, 'reading', true)
        } else {
            sectionQuestions = results
        }
     }
 
-    // 异常过量熔断：如果解析出的题目远超预期 (且预期不为0)，回退到严格模式
+    parsingLog.push(`  - Final count for section: ${sectionQuestions.length}`)
+
+    // 异常过量熔断
     if (targetCount > 0 && sectionQuestions.length > targetCount + 5) {
-        console.warn(`Warning: Extracted ${sectionQuestions.length} questions for section "${title}" but expected ${targetCount}. Retrying with strict mode.`)
+        parsingLog.push(`  - WARNING: Too many questions (${sectionQuestions.length} > ${targetCount}). Forcing strict mode.`)
         if (title.includes('阅读表达') || title.includes('任务型阅读') || title.includes('文段表达') || title.includes('写作')) {
              sectionQuestions = parseNoOptionBlock(content, orderIndex, title.includes('写作') ? 'writing' : 'reading', true)
         }
     }
-
-    // 再次熔断：如果还是太多，且有预期数量，我们尝试截取前 N 个？
-    // 暂时不做强行截断，保留现状
     
     questions.push(...sectionQuestions)
     
@@ -330,11 +333,10 @@ function extractQuestions(text: string): ParsedQuestion[] {
     }
   }
 
-  return questions
+  return { questions, parsingLog }
 }
 
-// === 标准带选项题目解析 (单选、完形) ===
-// supportArticle: 是否支持文章前置（如完形）
+// ... parseStandardBlock 保持不变 ...
 function parseStandardBlock(text: string, startIndex: number, type: ParsedQuestion['sectionType'], supportArticle = false): ParsedQuestion[] {
   const questions: ParsedQuestion[] = []
   let currentOrder = startIndex
@@ -370,10 +372,8 @@ function parseStandardBlock(text: string, startIndex: number, type: ParsedQuesti
   return questions
 }
 
-// === 阅读理解解析 (多篇文章) ===
+// ... parseReading 保持不变 ...
 function parseReading(text: string, startIndex: number): ParsedQuestion[] {
-    // 简化处理：直接视为完形填空处理（文章+题目），因为我们还没做多篇分割
-    // 只要能把题目抓出来就行，文章稍微乱点没关系
     return parseStandardBlock(text, startIndex, 'reading', true)
 }
 
@@ -383,22 +383,15 @@ function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuesti
     const questions: ParsedQuestion[] = []
     let currentOrder = startIndex
     
-    // 无选项题目的特征：只有题干，没有ABCD
-    // 同样先找文章（如果有）
-    // 阅读表达通常有文章，作文通常没有（只有提示语）
-    
     let article = ''
     let contentText = text
     
-    // 尝试找到第一个题号
     const firstQuestionIndex = text.search(/\d+[.．、]/)
     
-    if (firstQuestionIndex > 50) { // 如果前面有很长一段（>50字符），认为是文章
+    if (firstQuestionIndex > 50) { 
         article = text.substring(0, firstQuestionIndex).trim()
         contentText = text.substring(firstQuestionIndex)
     } else if (type === 'writing') {
-        // 作文通常就是一个题目，或者没有题号
-        // 如果没有题号，把整段当做一个题
         if (firstQuestionIndex === -1) {
              questions.push({
                 number: 'writing',
@@ -420,7 +413,6 @@ function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuesti
     for (const block of rawBlocks) {
         if (block.length < 5 || !block.match(/^\d+[.．、]/)) continue
         
-        // 提取题号
         const headerMatch = block.match(/^(\d+)[.．、]\s*(?:[（(](\d*\.?\d*)\s*分?[）)])?\s*/)
         if (!headerMatch) continue
         
@@ -432,30 +424,25 @@ function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuesti
         let isQuestion = false;
 
         if (strictMode) {
-            // 严格模式：要有分值或答案标记
             const hasScore = block.match(/[（(]\s*\d+\s*分\s*[）)]/)
             const hasAnswerKey = block.includes('【答案】') || block.includes('【解析】')
             if (hasScore || hasAnswerKey) isQuestion = true;
         } else {
-            // 宽松模式：
-            // 1. 如果有分值或答案标记，肯定是对的
+            // 宽松模式：断号容忍
             const hasScore = block.match(/[（(]\s*\d+\s*分\s*[）)]/)
             const hasAnswerKey = block.includes('【答案】') || block.includes('【解析】')
             if (hasScore || hasAnswerKey) {
                 isQuestion = true;
             } 
-            // 2. 关键新增：如果题号连续，即使没有标记，也认为是题目！
-            // 例如上一题是 33，这题是 34，那它 99.9% 是题目
-            else if (!isNaN(number) && number === currentOrder + 1) {
+            // 关键修改：允许适度的断号 (比如中间隔了1-5题)
+            else if (!isNaN(number) && number > currentOrder && number <= currentOrder + 5) {
                 isQuestion = true;
             }
-            // 3. 如果是第一题（currentOrder == startIndex），且数字合理（比如34），也暂时通过？
-            // 风险较大，暂时保守一点，只信赖连续性
         }
 
         if (!isQuestion) continue;
         
-        // 提取答案解析（如果有）
+        // ... 提取答案解析 ...
         let correctAnswer, analysis
         const answerMatch = content.match(/【答案】\s*([^\n【]+)/)
         if (answerMatch) {
@@ -476,7 +463,6 @@ function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuesti
         
         content = content.replace(/【[^】]+】[\s\S]*?(?=【|$)/g, '').trim()
 
-        // 额外过滤：如果内容太短且全是数字或无意义字符，跳过
         if (content.length < 2) continue;
 
         // 只有确认是题目后，才更新 currentOrder
@@ -485,7 +471,7 @@ function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuesti
         questions.push({
             number: numberStr,
             content,
-            options: null, // 无选项
+            options: null,
             correctAnswer,
             analysis,
             knowledgeCodes: [type === 'writing' ? 'writing' : 'reading_response'],
@@ -498,7 +484,7 @@ function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuesti
     return questions
 }
 
-// ... parseQuestionBlock, extractKnowledgeFromQuestion ...
+// ... parseQuestionBlock 保持不变 ...
 function parseQuestionBlock(block: string): ParsedQuestion | null {
     const headerMatch = block.match(/^(\d+)[.．、]\s*(?:[（(](\d*\.?\d*)\s*分?[）)])?\s*/)
     if (!headerMatch) return null
@@ -586,6 +572,7 @@ function parseQuestionBlock(block: string): ParsedQuestion | null {
     return null
 }
 
+// ... extractKnowledgeFromQuestion 保持不变 ...
 function extractKnowledgeFromQuestion(question: ParsedQuestion): {
   knowledgeCodes: string[]
   confidence: number
