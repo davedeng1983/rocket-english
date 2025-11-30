@@ -248,7 +248,7 @@ export default function AttributionDialog({
             <KnowledgePointSelector
               gapType={selectedType}
               gapDetail={gapDetail}
-              questionContent={String(question.content || '')}
+              questionContent={displayContent}
               questionKnowledgePoints={
                 question.meta && typeof question.meta === 'object' && 'kps' in question.meta
                   ? (question.meta as any).kps || []
