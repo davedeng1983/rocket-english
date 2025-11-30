@@ -879,11 +879,22 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
           const currentWrongIndex = wrongQuestions.findIndex(
             (q) => q.id === currentWrongQuestion.id
           )
+          
+          // 格式化正确答案显示：如果是选项字母，显示完整选项内容
+          let formattedCorrectAnswer = currentWrongQuestion.correct_answer || ''
+          if (currentWrongQuestion.options && Array.isArray(currentWrongQuestion.options) && formattedCorrectAnswer) {
+            const correctIndex = formattedCorrectAnswer.charCodeAt(0) - 65 // A=0, B=1, C=2, D=3
+            if (correctIndex >= 0 && correctIndex < currentWrongQuestion.options.length) {
+              const optionText = currentWrongQuestion.options[correctIndex]
+              formattedCorrectAnswer = `${formattedCorrectAnswer}. ${optionText}`
+            }
+          }
+          
           return (
             <AttributionDialog
               question={currentWrongQuestion}
               userAnswer={userAnswers[currentWrongQuestion.id] || ''}
-              correctAnswer={currentWrongQuestion.correct_answer || ''}
+              correctAnswer={formattedCorrectAnswer}
               attemptId={(window as any).__currentAttemptId || ''}
               currentIndex={currentWrongIndex + 1}
               totalCount={wrongQuestions.length}
