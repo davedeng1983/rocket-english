@@ -450,10 +450,13 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
             </div>
             
             {/* 如果有前置文章（如阅读理解/完形），显示文章 */}
-            {currentQuestion.meta?.article && (
+            {currentQuestion.meta && 
+             typeof currentQuestion.meta === 'object' && 
+             'article' in currentQuestion.meta && 
+             (currentQuestion.meta as any).article && (
                  <div className="mb-6 rounded-lg bg-slate-50 p-4 text-sm leading-relaxed text-slate-700">
                      <h4 className="mb-2 font-bold text-slate-500">阅读材料</h4>
-                     <p className="whitespace-pre-wrap">{currentQuestion.meta.article}</p>
+                     <p className="whitespace-pre-wrap">{(currentQuestion.meta as any).article}</p>
                  </div>
             )}
 
