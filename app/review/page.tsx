@@ -146,6 +146,7 @@ export default function ReviewPage() {
   const handleAttributionComplete = async (
     gapType: 'vocab' | 'grammar' | 'logic',
     gapDetail: string,
+    knowledgePoints: string[] = [], // 新增：知识点列表
     attemptId?: string
   ) => {
     if (!currentWrongQuestion) return
@@ -160,6 +161,9 @@ export default function ReviewPage() {
           body: JSON.stringify({
             gapId: currentGap.id,
             actionType: 'forget_gap',
+            contextData: {
+              knowledge_points: knowledgePoints, // 保存知识点信息
+            },
           }),
         })
       } catch (error) {
