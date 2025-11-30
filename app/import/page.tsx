@@ -172,7 +172,10 @@ export default function ImportPage() {
               />
             )}
             <span className="relative z-10">
-              {uploading ? `正在解析中... ${Math.round(progress)}%` : '开始导入'}
+              {uploading 
+                ? (progress === 100 ? '正在解析试卷(含图片可能较慢)...' : `上传中... ${Math.round(progress)}%`) 
+                : '开始导入'
+              }
             </span>
           </button>
 
