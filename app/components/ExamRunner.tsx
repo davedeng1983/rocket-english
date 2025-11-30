@@ -420,11 +420,13 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
         ;(window as any).__currentAttemptId = attempt.id
         // 自动展开详细结果，让用户立即看到错题
         setShowResultDetail(true)
-        // 延迟 1.5 秒显示归因弹窗，让用户先看到结果
+        // 延迟 3 秒显示归因弹窗，让用户先看到结果页面
+        // 给用户足够时间查看结果
         setTimeout(() => {
+          console.log('🔵 延迟3秒后，显示归因对话框')
           setCurrentWrongQuestion(wrongQuestions[0])
           setShowAttribution(true)
-        }, 1500)
+        }, 3000)
       } else {
         // 没有错题，但也要显示结果页面，让用户查看
         // 不自动调用 onComplete，让用户主动选择何时退出
@@ -660,7 +662,35 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
                 : '发现了薄弱环节，系统已为你生成补短板计划'}
             </p>
 
-            {/* 如果有错题，自动展开详细结果 */}
+            {/* 如果有错题，自动展开详细结果并显示提示 */}
+            {wrongCount > 0 && (
+              <>
+                <div className="mb-4 rounded-lg border-2 border-red-300 bg-red-100 p-4 text-center shadow-md">
+                  <p className="text-base font-bold text-red-900">
+                    ⚠️ 你有 {wrongCount} 道题答错了
+                  </p>
+                  <p className="mt-2 text-sm text-red-700">
+                    详细结果已自动展开，请向下滚动查看每道题的解析
+                  </p>
+                  <p className="mt-2 text-xs text-red-600">
+                    💡 稍后会弹出错题归因对话框，帮你记录错误原因
+                  </p>
+                </div>
+                
+                {/* 显示详细结果的提示 */}
+                {!showResultDetail && (
+                  <div className="mb-4 text-center">
+                    <button 
+                      onClick={() => setShowResultDetail(true)}
+                      className="rounded-lg border-2 border-blue-500 bg-blue-50 px-6 py-3 font-bold text-blue-700 hover:bg-blue-100"
+                    >
+                      📊 点击查看详细结果（每道题的对错情况）
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+            
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
               <button 
                 onClick={() => setShowResultDetail(!showResultDetail)}
@@ -681,15 +711,6 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
                 返回
               </button>
             </div>
-            
-            {/* 如果有错题，提示用户查看详细结果 */}
-            {wrongCount > 0 && (
-              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 text-center">
-                <p className="text-sm font-medium text-red-800">
-                  ⚠️ 你有 {wrongCount} 道题答错了，请查看详细结果了解错题情况
-                </p>
-              </div>
-            )}
           </div>
 
           {/* 详细结果视图 */}
@@ -835,7 +856,14 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
           )}
         </div>
         
-        {/* 错题归因弹窗 */}
+        {/* 错题归因弹窗 - 增加顶部提示，告知用户可以关闭后查看结果 */}
+        {showAttribution && currentWrongQuestion && (
+          <div className="fixed bottom-4 left-1/2 z-40 -translate-x-1/2 rounded-lg border-2 border-blue-500 bg-blue-100 px-4 py-2 text-center shadow-lg">
+            <p className="text-sm font-medium text-blue-900">
+              💡 提示：你可以先关闭这个对话框，向下滚动查看详细结果，然后再继续归因
+            </p>
+          </div>
+        )}
         {showAttribution && currentWrongQuestion && (() => {
           const wrongQuestions = questions.filter(
             (q) => userAnswers[q.id] && userAnswers[q.id] !== q.correct_answer
