@@ -75,32 +75,61 @@ ${article ? `文章：${article.substring(0, 500)}...` : ''}
 
 只返回JSON，不要其他文字。`
   } else if (gapType === 'grammar') {
-    prompt = `作为初三英语老师，请分析以下题目可能涉及的语法点，生成3-5个可能的语法问题选项。
+    prompt = `作为初三英语老师，请仔细分析以下题目，识别学生可能不理解的语法点，生成3-5个具体的语法问题选项。
 
 题目内容：
 ${questionContent}
 ${questionOptions ? `选项：${questionOptions.join(' | ')}` : ''}
 ${correctAnswer ? `正确答案：${correctAnswer}` : ''}
 
+请重点分析以下语法点：
+1. **情态动词**：can/could/may/might/must/should 的用法和区别
+2. **时态**：一般现在时、一般过去时、现在完成时、过去完成时等
+3. **语态**：主动语态和被动语态
+4. **从句**：定语从句、状语从句、宾语从句等
+5. **非谓语动词**：to do, doing, done 的用法
+6. **虚拟语气**：if条件句、wish等
+7. **主谓一致**：单复数一致
+8. **固定搭配**：动词短语、介词搭配等
+
 要求：
-1. 识别题目中可能存在的语法点（时态、语态、从句、非谓语等）
-2. 每个选项描述具体的语法问题，例如："第X句话的被动语态不理解"、"if引导的条件句不清楚"等
-3. 返回JSON格式：{"options": [{"value": "语法问题描述", "label": "语法问题描述"}]}
+1. 必须根据题目内容具体分析，不要生成通用选项
+2. 每个选项要具体描述语法问题，例如：
+   - "can/could/may 表示请求许可的用法不理解"
+   - "被动语态 'was asked' 的结构不清楚"
+   - "if引导的条件句的时态规则不理解"
+   - "定语从句中 which 和 that 的区别不清楚"
+3. 如果题目涉及多个语法点，优先选择最核心的3-5个
+4. 返回JSON格式：{"options": [{"value": "具体语法问题描述", "label": "具体语法问题描述"}]}
 
 只返回JSON，不要其他文字。`
   } else {
     // logic
-    prompt = `作为初三英语老师，请分析以下阅读理解题目，找出可能的逻辑理解难点，生成3-5个选项。
+    prompt = `作为初三英语老师，请仔细分析以下阅读理解题目，找出学生可能不理解的逻辑关系，生成3-5个具体的逻辑问题选项。
 
-${article ? `文章内容：\n${article}\n\n` : ''}
+${article ? `文章内容：\n${article.substring(0, 2000)}\n\n` : ''}
 题目：${questionContent}
 ${questionOptions ? `选项：${questionOptions.join(' | ')}` : ''}
 
+请重点分析以下逻辑关系：
+1. **因果关系**：because, since, as, so, therefore, thus 等
+2. **转折关系**：but, however, although, though, yet, while 等
+3. **条件关系**：if, unless, provided that, as long as 等
+4. **递进关系**：and, also, moreover, furthermore 等
+5. **对比关系**：while, whereas, on the other hand 等
+6. **时间顺序**：first, then, finally, after, before 等
+7. **推理判断**：infer, imply, suggest, indicate, conclude 等
+8. **指代关系**：this, that, these, those, it, they 等指代的内容
+
 要求：
-1. 识别文章中的逻辑关系（因果关系、转折关系、条件关系等）
-2. 找出可能理解困难的句子或段落
-3. 每个选项描述具体的逻辑问题，例如："第2段的因果关系不理解"、"转折词but后面的意思不清楚"等
-4. 返回JSON格式：{"options": [{"value": "逻辑问题描述", "label": "逻辑问题描述"}]}
+1. 必须根据文章和题目内容具体分析，不要生成通用选项
+2. 每个选项要具体描述逻辑问题，例如：
+   - "第2段中 'because' 引导的因果关系不理解"
+   - "转折词 'however' 后面的意思不清楚"
+   - "无法理解 'this' 指代的具体内容"
+   - "推理题：无法从文章推断出答案"
+3. 如果涉及多个逻辑关系，优先选择最核心的3-5个
+4. 返回JSON格式：{"options": [{"value": "具体逻辑问题描述", "label": "具体逻辑问题描述"}]}
 
 只返回JSON，不要其他文字。`
   }
@@ -162,40 +191,95 @@ function generateOptionsByRules(
     
     const options: Array<{ value: string; label: string }> = []
     
+    // 检查情态动词（请求许可、能力、推测等）
+    if (fullText.match(/\b(can|could|may|might|must|should|would)\b/)) {
+      const modalVerbs = fullText.match(/\b(can|could|may|might|must|should|would)\b/g) || []
+      const uniqueModals = Array.from(new Set(modalVerbs))
+      if (uniqueModals.length > 0) {
+        const modalStr = uniqueModals.join('/')
+        if (fullText.match(/\b(can|could|may)\s+(i|you|we|they)\s+\w+/i)) {
+          options.push({ value: `${modalStr} 表示请求许可的用法不理解`, label: `${modalStr} 表示请求许可的用法不理解` })
+        } else if (fullText.match(/\b(can|could)\s+\w+/i)) {
+          options.push({ value: `${modalStr} 表示能力的用法不理解`, label: `${modalStr} 表示能力的用法不理解` })
+        } else {
+          options.push({ value: `情态动词 ${modalStr} 的用法不理解`, label: `情态动词 ${modalStr} 的用法不理解` })
+        }
+      }
+    }
+    
     // 检查时态
-    if (fullText.match(/\b(was|were|has|have|had|will|would)\b/)) {
-      options.push({ value: '时态用法不理解', label: '时态用法不理解' })
+    if (fullText.match(/\b(was|were|has|have|had|will|would|did|does|did)\b/)) {
+      if (fullText.match(/\b(has|have)\s+\w+ed\b/)) {
+        options.push({ value: '现在完成时的用法不理解', label: '现在完成时的用法不理解' })
+      } else if (fullText.match(/\b(had)\s+\w+ed\b/)) {
+        options.push({ value: '过去完成时的用法不理解', label: '过去完成时的用法不理解' })
+      } else if (fullText.match(/\b(was|were)\b/)) {
+        options.push({ value: '一般过去时的用法不理解', label: '一般过去时的用法不理解' })
+      } else if (fullText.match(/\b(will|would)\b/)) {
+        options.push({ value: '将来时的用法不理解', label: '将来时的用法不理解' })
+      } else {
+        options.push({ value: '时态用法不理解', label: '时态用法不理解' })
+      }
     }
     
     // 检查被动语态
     if (fullText.match(/\b(was|were|is|are|been)\s+\w+ed\b/)) {
-      options.push({ value: '被动语态不理解', label: '被动语态不理解' })
+      options.push({ value: '被动语态的结构不理解', label: '被动语态的结构不理解' })
     }
     
     // 检查从句
-    if (fullText.match(/\b(that|which|who|where|when|if|because|although)\b/)) {
-      options.push({ value: '从句结构不理解', label: '从句结构不理解' })
+    if (fullText.match(/\b(that|which|who|whom|whose|where|when|why)\b/)) {
+      if (fullText.match(/\b(which|that)\b/)) {
+        options.push({ value: '定语从句中 which 和 that 的区别不清楚', label: '定语从句中 which 和 that 的区别不清楚' })
+      } else {
+        options.push({ value: '定语从句的结构不理解', label: '定语从句的结构不理解' })
+      }
+    }
+    if (fullText.match(/\b(if|because|although|though|when|while|since|as)\b/)) {
+      if (fullText.match(/\bif\b/)) {
+        options.push({ value: 'if 引导的条件句的时态规则不理解', label: 'if 引导的条件句的时态规则不理解' })
+      } else {
+        options.push({ value: '状语从句的结构不理解', label: '状语从句的结构不理解' })
+      }
     }
     
     // 检查非谓语动词
-    if (fullText.match(/\b(to\s+\w+|ing\s+\w+)\b/)) {
-      options.push({ value: '非谓语动词用法不清楚', label: '非谓语动词用法不清楚' })
+    if (fullText.match(/\b(to\s+\w+|ing\s+\w+|ed\s+\w+)\b/)) {
+      if (fullText.match(/\bto\s+\w+\b/)) {
+        options.push({ value: '动词不定式 to do 的用法不清楚', label: '动词不定式 to do 的用法不清楚' })
+      } else if (fullText.match(/\bing\s+\w+\b/)) {
+        options.push({ value: '动名词 doing 的用法不清楚', label: '动名词 doing 的用法不清楚' })
+      } else {
+        options.push({ value: '非谓语动词的用法不清楚', label: '非谓语动词的用法不清楚' })
+      }
     }
     
     // 检查虚拟语气
-    if (fullText.match(/\b(if\s+\w+\s+would|wish|if\s+only)\b/)) {
-      options.push({ value: '虚拟语气不理解', label: '虚拟语气不理解' })
+    if (fullText.match(/\b(if\s+\w+\s+would|wish|if\s+only|were)\b/)) {
+      options.push({ value: '虚拟语气的用法不理解', label: '虚拟语气的用法不理解' })
     }
     
+    // 检查主谓一致
+    if (fullText.match(/\b(is|are|was|were|has|have)\b/)) {
+      // 简单检查：如果同时出现 is/are 或 was/were，可能是主谓一致问题
+      if ((fullText.includes('is') && fullText.includes('are')) || 
+          (fullText.includes('was') && fullText.includes('were'))) {
+        options.push({ value: '主谓一致的规则不理解', label: '主谓一致的规则不理解' })
+      }
+    }
+    
+    // 去重
+    const uniqueOptions = Array.from(new Map(options.map(opt => [opt.value, opt])).values())
+    
     // 如果选项不足，添加通用选项
-    while (options.length < 3) {
-      options.push({ 
-        value: `其他语法点（请具体说明）`, 
-        label: `其他语法点（请具体说明）` 
+    if (uniqueOptions.length < 3) {
+      uniqueOptions.push({ 
+        value: '其他语法点（请具体说明）', 
+        label: '其他语法点（请具体说明）' 
       })
     }
     
-    return options.slice(0, 5)
+    return uniqueOptions.slice(0, 5)
   } else {
     // logic
     const fullText = `${article || ''} ${questionContent}`.toLowerCase()
@@ -203,34 +287,74 @@ function generateOptionsByRules(
     const options: Array<{ value: string; label: string }> = []
     
     // 检查转折关系
-    if (fullText.match(/\b(but|however|although|though|yet)\b/)) {
-      options.push({ value: '转折关系不理解', label: '转折关系不理解' })
+    const contrastWords = fullText.match(/\b(but|however|although|though|yet|while|whereas|on the other hand)\b/g)
+    if (contrastWords && contrastWords.length > 0) {
+      const uniqueWords = Array.from(new Set(contrastWords))
+      options.push({ 
+        value: `转折关系不理解（如 ${uniqueWords.join('、')} 等）`, 
+        label: `转折关系不理解（如 ${uniqueWords.join('、')} 等）` 
+      })
     }
     
     // 检查因果关系
-    if (fullText.match(/\b(because|since|as|so|therefore|thus)\b/)) {
-      options.push({ value: '因果关系不理解', label: '因果关系不理解' })
+    const causeWords = fullText.match(/\b(because|since|as|so|therefore|thus|as a result|due to)\b/g)
+    if (causeWords && causeWords.length > 0) {
+      const uniqueWords = Array.from(new Set(causeWords))
+      options.push({ 
+        value: `因果关系不理解（如 ${uniqueWords.join('、')} 等）`, 
+        label: `因果关系不理解（如 ${uniqueWords.join('、')} 等）` 
+      })
     }
     
     // 检查条件关系
-    if (fullText.match(/\b(if|unless|provided|as long as)\b/)) {
-      options.push({ value: '条件关系不理解', label: '条件关系不理解' })
+    const conditionWords = fullText.match(/\b(if|unless|provided|as long as|in case)\b/g)
+    if (conditionWords && conditionWords.length > 0) {
+      const uniqueWords = Array.from(new Set(conditionWords))
+      options.push({ 
+        value: `条件关系不理解（如 ${uniqueWords.join('、')} 等）`, 
+        label: `条件关系不理解（如 ${uniqueWords.join('、')} 等）` 
+      })
     }
     
-    // 检查推理
-    if (fullText.match(/\b(infer|imply|suggest|indicate)\b/)) {
-      options.push({ value: '推理理解困难', label: '推理理解困难' })
+    // 检查递进关系
+    const additionWords = fullText.match(/\b(and|also|moreover|furthermore|in addition|besides)\b/g)
+    if (additionWords && additionWords.length > 0) {
+      options.push({ value: '递进关系不理解', label: '递进关系不理解' })
     }
+    
+    // 检查时间顺序
+    const timeWords = fullText.match(/\b(first|then|finally|after|before|next|later|meanwhile)\b/g)
+    if (timeWords && timeWords.length > 0) {
+      options.push({ value: '时间顺序关系不理解', label: '时间顺序关系不理解' })
+    }
+    
+    // 检查推理题
+    if (fullText.match(/\b(infer|imply|suggest|indicate|conclude|inference|implication)\b/)) {
+      options.push({ value: '推理题：无法从文章推断出答案', label: '推理题：无法从文章推断出答案' })
+    }
+    
+    // 检查指代关系
+    if (fullText.match(/\b(this|that|these|those|it|they|them)\b/)) {
+      options.push({ value: '指代关系不理解（如 this/that/it 等指代的内容）', label: '指代关系不理解（如 this/that/it 等指代的内容）' })
+    }
+    
+    // 检查对比关系
+    if (fullText.match(/\b(while|whereas|on the other hand|in contrast)\b/)) {
+      options.push({ value: '对比关系不理解', label: '对比关系不理解' })
+    }
+    
+    // 去重
+    const uniqueOptions = Array.from(new Map(options.map(opt => [opt.value, opt])).values())
     
     // 如果选项不足，添加通用选项
-    while (options.length < 3) {
-      options.push({ 
+    if (uniqueOptions.length < 3) {
+      uniqueOptions.push({ 
         value: '其他逻辑关系（请具体说明）', 
         label: '其他逻辑关系（请具体说明）' 
       })
     }
     
-    return options.slice(0, 5)
+    return uniqueOptions.slice(0, 5)
   }
 }
 
