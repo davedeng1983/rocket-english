@@ -12,6 +12,7 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false)
 
   // Profile Data
+  const [fullName, setFullName] = useState('')
   const [grade, setGrade] = useState('初三')
   const [targetScore, setTargetScore] = useState(110)
   const [isEditing, setIsEditing] = useState(false)
@@ -48,6 +49,7 @@ export default function ProfilePage() {
         .single()
 
       if (profile) {
+        setFullName(profile.full_name || '')
         setGrade(profile.grade_level || '初三')
         setTargetScore(profile.target_score || 110)
       }
@@ -89,6 +91,7 @@ export default function ProfilePage() {
         .from('profiles')
         .upsert({
           id: user.id,
+          full_name: fullName,
           grade_level: grade,
           target_score: Number(targetScore),
           updated_at: new Date().toISOString()
@@ -130,7 +133,7 @@ export default function ProfilePage() {
                     {user.email?.[0].toUpperCase() || 'U'}
                 </div>
                 <div className="text-center md:text-left">
-                    <h1 className="text-2xl font-bold">{user.email?.split('@')[0]}</h1>
+                    <h1 className="text-2xl font-bold">{fullName || user.email?.split('@')[0]}</h1>
                     <div className="mt-2 flex items-center justify-center gap-4 text-blue-100 md:justify-start">
                         <span className="flex items-center gap-1 text-sm bg-white/10 px-3 py-1 rounded-full">
                             <Mail size={14} /> {user.email}
@@ -214,6 +217,21 @@ export default function ProfilePage() {
             </div>
 
             <div className="grid gap-6 md:grid-cols-2">
+                <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-slate-500 mb-2">姓名 / 昵称</label>
+                    {isEditing ? (
+                        <input
+                            type="text"
+                            value={fullName}
+                            onChange={(e) => setFullName(e.target.value)}
+                            className="w-full rounded-lg border border-slate-300 p-2.5 text-slate-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                            placeholder="请输入您的姓名或昵称"
+                        />
+                    ) : (
+                        <div className="p-2.5 text-slate-800 font-medium">{fullName || '未设置'}</div>
+                    )}
+                </div>
+
                 <div>
                     <label className="block text-sm font-medium text-slate-500 mb-2">当前年级</label>
                     {isEditing ? (

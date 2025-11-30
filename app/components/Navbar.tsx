@@ -16,7 +16,18 @@ export default function Navbar() {
     const supabase = createClient()
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      setUser(user)
+      if (user) {
+        // Fetch profile to get full_name
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', user.id)
+            .single()
+        
+        setUser({ ...user, ...profile })
+      } else {
+        setUser(null)
+      }
     }
     getUser()
 
@@ -77,7 +88,7 @@ export default function Navbar() {
           {user ? (
             <div className="flex items-center gap-4">
               <Link href="/profile" className="hidden md:flex flex-col items-end transition hover:opacity-70">
-                <span className="text-sm font-medium text-slate-900">{user.email?.split('@')[0]}</span>
+                <span className="text-sm font-medium text-slate-900">{user.full_name || user.email?.split('@')[0]}</span>
                 <span className="text-xs text-slate-500">个人中心</span>
               </Link>
               

@@ -11,9 +11,11 @@ CREATE EXTENSION IF NOT EXISTS "pg_trgm"; -- 用于全文搜索
 -- ============================================
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL PRIMARY KEY,
+  full_name TEXT, -- 用户自定义名称
   grade_level TEXT, -- e.g. '初三'
   target_score INTEGER, -- e.g. 115
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ============================================
