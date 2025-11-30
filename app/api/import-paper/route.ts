@@ -287,7 +287,17 @@ function extractQuestions(text: string): { questions: ParsedQuestion[], parsingL
     if (title.includes('单项') || title.includes('选择') || title.includes('Grammar')) {
        sectionQuestions = parseStandardBlock(content, orderIndex, 'single_choice')
     } else if (title.includes('完形') || title.includes('完型') || title.includes('Cloze')) {
-       sectionQuestions = parseStandardBlock(content, orderIndex, 'cloze', true)
+       // 完形填空专用策略：优先标准解析，失败则尝试纯选项扫描
+       sectionQuestions = parseClozeBlock(content, orderIndex)
+       if (targetCount > 0 && sectionQuestions.length < targetCount) {
+           parsingLog.push(`  - Cloze standard parse failed (found ${sectionQuestions.length}/${targetCount}). Trying option scanning...`)
+           const scanResults = scanForOptions(content, orderIndex, sectionQuestions.length > 0 ? sectionQuestions[sectionQuestions.length-1].orderIndex + 1 : orderIndex + 1)
+           // 如果扫描结果更接近目标，使用扫描结果
+           if (scanResults.length > sectionQuestions.length) {
+                sectionQuestions = scanResults
+                parsingLog.push(`  - Option scanning found ${sectionQuestions.length} questions.`)
+           }
+       }
     } else if (title.includes('阅读理解') || (title.includes('阅读') && !title.includes('表达'))) {
        sectionQuestions = parseReading(content, orderIndex)
     } else if (title.includes('阅读表达') || title.includes('任务型阅读')) {
@@ -334,6 +344,42 @@ function extractQuestions(text: string): { questions: ParsedQuestion[], parsingL
   }
 
   return { questions, parsingLog }
+}
+
+// === 完形填空专用块解析 ===
+function parseClozeBlock(text: string, startIndex: number): ParsedQuestion[] {
+    // 完形填空可能有前置文章
+    return parseStandardBlock(text, startIndex, 'cloze', true)
+}
+
+// === 纯选项扫描 (针对无题号的完形) ===
+function scanForOptions(text: string, startIndex: number, startNumber: number): ParsedQuestion[] {
+    const questions: ParsedQuestion[] = []
+    let currentOrder = startNumber
+    
+    // 查找所有选项组 (A...B...C...D...)
+    // 更加宽松的正则
+    const optionGroupPattern = /(?:^|\n|)\s*(?:A[.．、](?:[^B]*?)B[.．、](?:[^C]*?)C[.．、](?:[^D]*?)D[.．、](?:[^\n]*?))(?=\n|$)/gi
+    
+    let match
+    while ((match = optionGroupPattern.exec(text)) !== null) {
+        const block = match[0]
+        const q = parseQuestionBlock(block)
+        if (q && q.options && q.options.length === 4) {
+             // 强制分配序号
+             q.number = String(currentOrder)
+             q.orderIndex = currentOrder
+             q.sectionType = 'cloze'
+             // 尝试在文本中找对应的文章上下文？有点难，这里主要为了找回题目
+             // 对于完形，内容通常是空的 (因为在文章里)，或者只有选项
+             if (!q.content) q.content = `(Question ${currentOrder})`
+             
+             questions.push(q)
+             currentOrder++
+        }
+    }
+    
+    return questions
 }
 
 // === 标准带选项题目解析 (单选、完形) ===
@@ -426,7 +472,8 @@ function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuesti
         
         // 增强的题号提取：支持 1. 或 (1) 或 [1]
         // 并且支持忽略前面的 (2分) 等干扰
-        const headerMatch = block.match(/(?:^|\n)\s*(?:(?:[（(]\d+分[）)])\s*)?(?:(\d+)[.．、]|[（(](\d+)[）)]|\[(\d+)\])/)
+        // 关键更新：支持小数分值，如 (2.5分)
+        const headerMatch = block.match(/(?:^|\n)\s*(?:(?:[（(]\d+(?:\.\d+)?分[）)])\s*)?(?:(\d+)[.．、]|[（(](\d+)[）)]|\[(\d+)\])/)
         if (!headerMatch) continue
         
         const numberStr = headerMatch[1] || headerMatch[2] || headerMatch[3]
@@ -438,12 +485,13 @@ function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuesti
         let isQuestion = false;
 
         if (strictMode) {
-            const hasScore = block.match(/[（(]\s*\d+\s*分\s*[）)]/)
+            // 支持小数分值
+            const hasScore = block.match(/[（(]\s*\d+(?:\.\d+)?\s*分\s*[）)]/)
             const hasAnswerKey = block.includes('【答案】') || block.includes('【解析】')
             if (hasScore || hasAnswerKey) isQuestion = true;
         } else {
             // 宽松模式
-            const hasScore = block.match(/[（(]\s*\d+\s*分\s*[）)]/)
+            const hasScore = block.match(/[（(]\s*\d+(?:\.\d+)?\s*分\s*[）)]/)
             const hasAnswerKey = block.includes('【答案】') || block.includes('【解析】')
             if (hasScore || hasAnswerKey) {
                 isQuestion = true;
@@ -503,12 +551,20 @@ function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuesti
 // ... parseQuestionBlock 保持不变 ...
 function parseQuestionBlock(block: string): ParsedQuestion | null {
     // 增强题号匹配
-    const headerMatch = block.match(/(?:^|\n)\s*(?:(?:[（(]\d+分[）)])\s*)?(?:(\d+)[.．、]|[（(](\d+)[）)]|\[(\d+)\]|(①|②|③|④|⑤))/)
-    if (!headerMatch) return null
+    // 支持小数分值
+    const headerMatch = block.match(/(?:^|\n)\s*(?:(?:[（(]\d+(?:\.\d+)?分[）)])\s*)?(?:(\d+)[.．、]|[（(](\d+)[）)]|\[(\d+)\]|(①|②|③|④|⑤))/)
+    // 注意：如果 scanForOptions 调用，block 可能没有题号，所以这里要小心
+    // scanForOptions 传入的 block 是 A...B...C...D...
+    // 所以 headerMatch 可能会失败
+    // 修改：允许没有题号 (只要有选项)
     
-    const number = headerMatch[1] || headerMatch[2] || headerMatch[3] || headerMatch[4]
-    // 移除题号
-    const rawContent = block.replace(headerMatch[0], '').trim()
+    let number = ''
+    let rawContent = block
+    
+    if (headerMatch) {
+        number = headerMatch[1] || headerMatch[2] || headerMatch[3] || headerMatch[4]
+        rawContent = block.replace(headerMatch[0], '').trim()
+    }
 
     let correctAnswer: string | undefined
     let analysis: string | undefined
@@ -539,7 +595,8 @@ function parseQuestionBlock(block: string): ParsedQuestion | null {
     contentAndOptions = contentAndOptions.replace(/【[^】]+】[\s\S]*?(?=【|$)/g, '')
 
     // 分离题干和选项
-    const optionAIndex = contentAndOptions.search(/\sA[.．、]/)
+    // 增强：支持 A. B. C. D. 在同一行的情况 (scanForOptions 使用)
+    const optionAIndex = contentAndOptions.search(/(?:^|\s)A[.．、]/)
     
     let content = ''
     let options: string[] = []
@@ -548,6 +605,7 @@ function parseQuestionBlock(block: string): ParsedQuestion | null {
         content = contentAndOptions.substring(0, optionAIndex).trim()
         const optionsPart = contentAndOptions.substring(optionAIndex)
         
+        // 增强的选项正则，支持换行或空格分隔
         const optionMatches = optionsPart.match(
             /A[.．、]\s*([\s\S]*?)\s*B[.．、]\s*([\s\S]*?)\s*C[.．、]\s*([\s\S]*?)\s*D[.．、]\s*([\s\S]*?)$/
         )
@@ -577,7 +635,7 @@ function parseQuestionBlock(block: string): ParsedQuestion | null {
 
     if (options.length === 4) {
         return {
-            number,
+            number: number || '0', // 默认 '0' 如果没有找到题号
             content,
             options,
             correctAnswer,
