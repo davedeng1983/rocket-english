@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { getCurrentUser } from '@/lib/supabase/auth'
 import type { Question } from '@/lib/supabase/types'
 import AttributionDialog from './AttributionDialog'
+import ReactMarkdown from 'react-markdown'
 import { 
   CheckCircle2, 
   BookOpen, 
@@ -471,28 +472,6 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
                      </ReactMarkdown>
                  </div>
             )}
-
-import ReactMarkdown from 'react-markdown'
-
-// ... existing code ...
-
-            <div className="mb-6">
-              <div className="text-lg leading-relaxed text-slate-900 markdown-content">
-                <ReactMarkdown
-                  components={{
-                    img: ({ node, ...props }) => (
-                      <img 
-                        {...props} 
-                        className="my-4 max-h-[400px] max-w-full rounded-lg border border-slate-200 object-contain shadow-sm"
-                      />
-                    ),
-                    p: ({ node, ...props }) => <p className="mb-4" {...props} />
-                  }}
-                >
-                  {currentQuestion.content}
-                </ReactMarkdown>
-              </div>
-            </div>
 
             {/* 选项 */}
             {currentQuestion.options && Array.isArray(currentQuestion.options) ? (
