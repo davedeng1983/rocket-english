@@ -1009,7 +1009,10 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
                         <h3 className="font-bold text-slate-700">阅读材料</h3>
                     </div>
                     <div className="text-base leading-relaxed text-slate-700">
-                        <HighlightedArticle content={articleContent} questionNumber={currentIndex + 1} />
+                        <HighlightedArticle 
+                          content={articleContent} 
+                          questionNumber={currentQuestion.order_index || currentIndex + 1} 
+                        />
                     </div>
                 </div>
             )}
@@ -1027,7 +1030,7 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
                         ? '书面表达'
                         : (currentQuestion?.options && Array.isArray(currentQuestion.options) && currentQuestion.options.length > 0 ? '阅读理解' : '阅读表达')}
                     </span>
-                    {/* 显示题号 */}
+                    {/* 显示题号：部分内题号（用于显示） */}
                     <span className="flex items-center justify-center rounded-md bg-blue-600 px-2.5 py-1 text-sm font-bold text-white shadow-sm">
                         #{currentIndex + 1}
                     </span>
@@ -1042,7 +1045,10 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
                     (currentQuestion.meta as any).article && (
                         <div className={`mb-6 rounded-lg bg-slate-50 p-4 text-sm leading-relaxed text-slate-700 ${isSplitView ? 'lg:hidden' : ''}`}>
                             <h4 className="mb-2 font-bold text-slate-500">阅读材料</h4>
-                            <HighlightedArticle content={articleContent} questionNumber={currentIndex + 1} />
+                            <HighlightedArticle 
+                              content={articleContent} 
+                              questionNumber={currentQuestion.order_index || currentIndex + 1} 
+                            />
                         </div>
                     )}
 
