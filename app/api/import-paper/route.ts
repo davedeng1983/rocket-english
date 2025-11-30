@@ -449,7 +449,10 @@ function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuesti
                 isQuestion = true;
             } 
             // 允许适度的断号 (1-5)
-            else if (!isNaN(number) && number > currentOrder && number <= currentOrder + 5) {
+            // 关键修改：防止题号倒退 (过滤 "题目1")
+            else if (!isNaN(number)) {
+                if (number <= currentOrder) continue; // 过滤倒退题号
+                if (number > currentOrder + 5) continue; // 过滤跳跃过大
                 isQuestion = true;
             }
         }
