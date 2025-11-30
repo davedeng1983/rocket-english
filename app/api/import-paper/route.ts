@@ -56,7 +56,8 @@ export async function POST(request: Request) {
     const metadata = extractMetadata(text)
 
     // 提取题目 (使用新的智能元数据解析器，带详细日志)
-    const { questions, parsingLog } = extractQuestions(text)
+    // 修改：同时返回 rawSections 供前端校对使用
+    const { questions, parsingLog, rawSections } = extractQuestions(text)
 
     // 调试模式：即使成功也附带文本样本和解析日志
     // 注意：为了防止 Response Body 过大导致 Vercel 500 错误，需隐藏 Base64 图片数据
@@ -85,7 +86,7 @@ export async function POST(request: Request) {
         year: metadata.year,
         region: metadata.region,
         structure_map: {
-          sections: sections.map(s => ({ title: s.title, content: s.content })), // 保存原始分块内容供人工校对
+          sections: rawSections.map(s => ({ title: s.title, content: s.content })), // 保存原始分块内容供人工校对
           total_questions: questions.length,
         },
       })
@@ -267,7 +268,7 @@ function extractMetadata(text: string): { year?: number; region?: string } {
  * 智能解析器：基于元数据进行目标导向解析
  * 返回题目数组和解析日志
  */
-function extractQuestions(text: string): { questions: ParsedQuestion[], parsingLog: string[] } {
+function extractQuestions(text: string): { questions: ParsedQuestion[], parsingLog: string[], rawSections: { title: string, content: string }[] } {
   const questions: ParsedQuestion[] = []
   const parsingLog: string[] = []
   let orderIndex = 0
@@ -408,7 +409,7 @@ function extractQuestions(text: string): { questions: ParsedQuestion[], parsingL
     }
   }
 
-  return { questions, parsingLog }
+  return { questions, parsingLog, rawSections: sections }
 }
 
 // === 完形填空专用块解析 ===
