@@ -410,7 +410,13 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
 
   // Highlight current question number in article
   const processedArticle = useMemo(() => {
-    const article = (currentQuestion?.meta as any)?.article;
+    // 增加类型安全检查：确保 meta 是对象且 article 存在
+    if (!currentQuestion?.meta || typeof currentQuestion.meta !== 'object') return '';
+    
+    // 使用类型断言访问 article，如果不存在则返回空字符串
+    const meta = currentQuestion.meta as { article?: string };
+    const article = meta.article;
+    
     if (!article || typeof article !== 'string') return '';
     
     const currentNum = currentIndex + 1;
@@ -419,10 +425,15 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
     // Matches either start of line or non-digit character before the number
     const pattern = new RegExp(`(^|[^0-9])(?:\\(\\s*${currentNum}\\s*\\)|（\\s*${currentNum}\\s*）|\\[\\s*${currentNum}\\s*\\]|${currentNum}\\s*[.．、])`, 'g');
     
-    return article.replace(pattern, (match, prefix) => {
-        const target = match.substring(prefix.length);
-        return `${prefix}\`${target}\``;
-    });
+    try {
+      return article.replace(pattern, (match, prefix) => {
+          const target = match.substring(prefix.length);
+          return `${prefix}\`${target}\``;
+      });
+    } catch (e) {
+      console.error('Highlight error:', e);
+      return article;
+    }
   }, [currentQuestion, currentIndex]);
 
   return (
