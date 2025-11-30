@@ -285,24 +285,33 @@ function extractQuestions(text: string): ParsedQuestion[] {
     } else if (title.includes('阅读理解') || (title.includes('阅读') && !title.includes('表达'))) {
        sectionQuestions = parseReading(content, orderIndex)
     } else if (title.includes('阅读表达') || title.includes('任务型阅读')) {
-       // 新增：阅读表达（无选项）- 初始尝试宽松模式
-       sectionQuestions = parseNoOptionBlock(content, orderIndex, 'reading', false)
+       // 默认尝试严格模式
+       sectionQuestions = parseNoOptionBlock(content, orderIndex, 'reading', true)
+       
+       // 智能熔断与降级：如果严格模式解析出的数量远少于预期（比如预期4题，只解析出0-1题），
+       // 或者解析出的数量为0但预期大于0，则启用宽松模式，但带有连续性检查
+       if ((targetCount > 0 && sectionQuestions.length < targetCount) || (sectionQuestions.length === 0 && targetCount > 0)) {
+           console.warn(`Strict mode yielded too few questions for "${title}". Retrying with loose mode + continuity check.`)
+           sectionQuestions = parseNoOptionBlock(content, orderIndex, 'reading', false)
+       }
     } else if (title.includes('文段表达') || title.includes('书面表达') || title.includes('写作')) {
-       // 新增：写作（无选项）
-       sectionQuestions = parseNoOptionBlock(content, orderIndex, 'writing', false)
+       // 写作通常就一题，严格模式可能太严
+       sectionQuestions = parseNoOptionBlock(content, orderIndex, 'writing', true)
+       if (sectionQuestions.length === 0) {
+            sectionQuestions = parseNoOptionBlock(content, orderIndex, 'writing', false)
+       }
     } else {
        // 默认策略
        const results = parseStandardBlock(content, orderIndex, 'single_choice')
        if (results.length === 0) {
-           // 默认策略里如果不带选项，必须启用严格模式，防止把全文都当题目
+           // 如果没解析出带选项的题，试试无选项的（严格模式）
            sectionQuestions = parseNoOptionBlock(content, orderIndex, 'reading', true)
        } else {
            sectionQuestions = results
        }
     }
 
-    // 熔断机制：如果解析出的题目远超预期 (且预期不为0)，启用严格模式重试
-    // 阈值：比如预期 5 题，解析出 10 题以上就算异常
+    // 异常过量熔断：如果解析出的题目远超预期 (且预期不为0)，回退到严格模式
     if (targetCount > 0 && sectionQuestions.length > targetCount + 5) {
         console.warn(`Warning: Extracted ${sectionQuestions.length} questions for section "${title}" but expected ${targetCount}. Retrying with strict mode.`)
         if (title.includes('阅读表达') || title.includes('任务型阅读') || title.includes('文段表达') || title.includes('写作')) {
@@ -310,8 +319,8 @@ function extractQuestions(text: string): ParsedQuestion[] {
         }
     }
 
-    // 再次熔断：如果还是太多，可能切分有问题，强行只取前 N 个 (如果 N 比较合理)
-    // 这里暂时不做强行截断，而是过滤掉题号跳跃过大的
+    // 再次熔断：如果还是太多，且有预期数量，我们尝试截取前 N 个？
+    // 暂时不做强行截断，保留现状
     
     questions.push(...sectionQuestions)
     
@@ -415,16 +424,36 @@ function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuesti
         const headerMatch = block.match(/^(\d+)[.．、]\s*(?:[（(](\d*\.?\d*)\s*分?[）)])?\s*/)
         if (!headerMatch) continue
         
-        const number = headerMatch[1]
+        const numberStr = headerMatch[1]
+        const number = parseInt(numberStr)
         let content = block.substring(headerMatch[0].length).trim()
 
-        // 严格模式检查
+        // 智能校验
+        let isQuestion = false;
+
         if (strictMode) {
+            // 严格模式：要有分值或答案标记
             const hasScore = block.match(/[（(]\s*\d+\s*分\s*[）)]/)
             const hasAnswerKey = block.includes('【答案】') || block.includes('【解析】')
-            // 如果既没有分值标记，也没有答案解析标记，就跳过
-            if (!hasScore && !hasAnswerKey) continue;
+            if (hasScore || hasAnswerKey) isQuestion = true;
+        } else {
+            // 宽松模式：
+            // 1. 如果有分值或答案标记，肯定是对的
+            const hasScore = block.match(/[（(]\s*\d+\s*分\s*[）)]/)
+            const hasAnswerKey = block.includes('【答案】') || block.includes('【解析】')
+            if (hasScore || hasAnswerKey) {
+                isQuestion = true;
+            } 
+            // 2. 关键新增：如果题号连续，即使没有标记，也认为是题目！
+            // 例如上一题是 33，这题是 34，那它 99.9% 是题目
+            else if (!isNaN(number) && number === currentOrder + 1) {
+                isQuestion = true;
+            }
+            // 3. 如果是第一题（currentOrder == startIndex），且数字合理（比如34），也暂时通过？
+            // 风险较大，暂时保守一点，只信赖连续性
         }
+
+        if (!isQuestion) continue;
         
         // 提取答案解析（如果有）
         let correctAnswer, analysis
@@ -450,15 +479,18 @@ function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuesti
         // 额外过滤：如果内容太短且全是数字或无意义字符，跳过
         if (content.length < 2) continue;
 
+        // 只有确认是题目后，才更新 currentOrder
+        if (!isNaN(number)) currentOrder = number;
+
         questions.push({
-            number,
+            number: numberStr,
             content,
             options: null, // 无选项
             correctAnswer,
             analysis,
             knowledgeCodes: [type === 'writing' ? 'writing' : 'reading_response'],
             sectionType: type,
-            orderIndex: parseInt(number) || ++currentOrder,
+            orderIndex: number || ++currentOrder,
             article: article || undefined
         })
     }
@@ -466,7 +498,7 @@ function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuesti
     return questions
 }
 
-// === 复用之前的 parseQuestionBlock ===
+// ... parseQuestionBlock, extractKnowledgeFromQuestion ...
 function parseQuestionBlock(block: string): ParsedQuestion | null {
     const headerMatch = block.match(/^(\d+)[.．、]\s*(?:[（(](\d*\.?\d*)\s*分?[）)])?\s*/)
     if (!headerMatch) return null
@@ -554,7 +586,6 @@ function parseQuestionBlock(block: string): ParsedQuestion | null {
     return null
 }
 
-// ... extractKnowledgeFromQuestion ...
 function extractKnowledgeFromQuestion(question: ParsedQuestion): {
   knowledgeCodes: string[]
   confidence: number
