@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 }
 
 function generateKnowledgePointsByType(
-  gapType: 'vocab' | 'grammar' | 'logic',
+  gapType: 'vocab' | 'grammar' | 'logic' | 'careless',
   gapDetail: string,
   questionContent: string
 ): Array<{ code: string; name: string; description?: string }> {
@@ -41,13 +41,16 @@ function generateKnowledgePointsByType(
       { code: 'grammar.sentence', name: '句子结构', description: '复合句、从句等复杂句式' },
       { code: 'grammar.word_order', name: '语序', description: '英语句子的语序规则' },
     ]
-  } else {
+  } else if (gapType === 'logic') {
     return [
       { code: 'logic.inference', name: '推理能力', description: '根据已知信息推断未知信息' },
       { code: 'logic.connection', name: '逻辑连接', description: '句子和段落之间的逻辑关系' },
       { code: 'logic.comprehension', name: '理解能力', description: '对文本整体意思的理解' },
       { code: 'logic.deduction', name: '演绎推理', description: '从一般到特殊的推理过程' },
     ]
+  } else {
+    // 'careless' 类型不需要知识点，返回空数组
+    return []
   }
 }
 

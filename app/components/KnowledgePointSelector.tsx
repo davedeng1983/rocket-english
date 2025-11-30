@@ -62,7 +62,7 @@ export default function KnowledgePointSelector({
     }
   }
 
-  const getDefaultKnowledgePoints = (type: 'vocab' | 'grammar' | 'logic'): KnowledgePoint[] => {
+  const getDefaultKnowledgePoints = (type: 'vocab' | 'grammar' | 'logic' | 'careless'): KnowledgePoint[] => {
     // 根据错误类型提供默认知识点选项
     if (type === 'vocab') {
       return [
@@ -76,12 +76,15 @@ export default function KnowledgePointSelector({
         { code: 'grammar.voice', name: '语态' },
         { code: 'grammar.sentence', name: '句子结构' },
       ]
-    } else {
+    } else if (type === 'logic') {
       return [
         { code: 'logic.inference', name: '推理能力' },
         { code: 'logic.connection', name: '逻辑连接' },
         { code: 'logic.comprehension', name: '理解能力' },
       ]
+    } else {
+      // 'careless' 类型不应该进入知识点选择，但为了类型安全，返回空数组
+      return []
     }
   }
 
