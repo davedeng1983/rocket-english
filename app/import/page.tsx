@@ -62,6 +62,7 @@ export default function ImportPage() {
           success: true,
           message: data.message,
           data: data.data,
+          debug_text: data.debug_text, // 关键：成功时也保存 debug_text
         })
         setFile(null)
         // 重置文件输入
@@ -146,11 +147,11 @@ export default function ImportPage() {
               {/* Debug Text Display - Always show if present */}
               {result.debug_text && (
                 <div className="mt-4">
-                   <p className="mb-1 text-xs font-semibold text-red-700">解析到的文本片段 (用于调试):</p>
-                   <pre className="max-h-60 overflow-y-auto rounded bg-red-100 p-2 text-xs text-red-900 whitespace-pre-wrap break-all">
+                   <p className="mb-1 text-xs font-semibold text-gray-700">🔍 解析日志与文本 (调试用):</p>
+                   <pre className="max-h-60 overflow-y-auto rounded bg-gray-800 p-3 text-xs text-green-400 whitespace-pre-wrap break-all font-mono">
                      {result.debug_text}
                    </pre>
-                   <p className="mt-1 text-xs text-red-600">请复制以上内容反馈给开发者</p>
+                   <p className="mt-1 text-xs text-gray-500">如果题目数量不对，请将上方黑框内的内容复制给开发者。</p>
                 </div>
               )}
 
