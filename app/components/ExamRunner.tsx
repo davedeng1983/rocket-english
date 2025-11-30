@@ -475,7 +475,16 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
                                     <img 
                                         {...props} 
                                         className="my-4 max-h-[400px] max-w-full rounded-lg border border-slate-200 object-contain shadow-sm"
-                                        onError={(e) => console.error('Image load error:', typeof props.src === 'string' ? props.src.substring(0, 50) + '...' : 'Blob image')}
+                                        onError={(e) => {
+                                          const img = e.currentTarget
+                                          img.style.display = 'none'
+                                          // 尝试在图片位置显示错误提示
+                                          const span = document.createElement('span')
+                                          span.className = 'inline-block rounded bg-slate-100 px-2 py-1 text-xs text-slate-500 border border-slate-200 my-2'
+                                          span.innerText = '图片加载失败 (可能是格式不支持或数据过大)'
+                                          img.parentNode?.insertBefore(span, img)
+                                          console.error('Image load error:', typeof props.src === 'string' ? props.src.substring(0, 50) + '...' : 'Blob image')
+                                        }}
                                     />
                                 ),
                                 p: ({ node, ...props }) => <p className="mb-4" {...props} />,
