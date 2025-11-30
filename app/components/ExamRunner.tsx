@@ -146,7 +146,8 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [examCompleted, setExamCompleted] = useState(false)
   const [score, setScore] = useState<number | null>(null)
-  const [viewState, setViewState] = useState<'overview' | 'running' | 'result'>('overview')
+  const [viewState, setViewState] = useState<'overview' | 'running' | 'result' | 'result_detail'>('overview')
+  const [showResultDetail, setShowResultDetail] = useState(false)
 
   useEffect(() => {
     loadExamData()
@@ -474,28 +475,209 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
 
   // === 视图 3: 考试结果 ===
   if (viewState === 'result') {
+    const correctCount = questions.filter(
+      (q) => userAnswers[q.id] === q.correct_answer
+    ).length
+    const wrongCount = questions.filter(
+      (q) => userAnswers[q.id] && userAnswers[q.id] !== q.correct_answer
+    ).length
+    const unansweredCount = questions.filter(
+      (q) => !userAnswers[q.id]
+    ).length
+
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-white to-slate-50 px-4">
-        <div className="w-full max-w-md rounded-2xl border border-green-200 bg-green-50 p-8 text-center shadow-lg">
-          <div className="mb-4 text-5xl">🎉</div>
-          <h2 className="mb-2 text-2xl font-bold text-green-900">考试完成！</h2>
-          <p className="mb-4 text-3xl font-bold text-green-700">
-            得分：{score} 分
-          </p>
-          <p className="text-green-600">
-            {score && score >= 80
-              ? '太棒了！继续保持！'
-              : '发现了薄弱环节，系统已为你生成补短板计划'}
-          </p>
-          <button 
-            onClick={() => onComplete ? onComplete() : router.push('/progress')}
-            className="mt-8 w-full rounded-lg bg-green-600 py-3 font-bold text-white hover:bg-green-700"
-          >
-            查看分析报告
-          </button>
+      <div className="min-h-screen bg-gradient-to-b from-white to-slate-50 px-4 py-8">
+        <div className="container mx-auto max-w-4xl">
+          {/* 结果摘要卡片 */}
+          <div className="mb-6 rounded-2xl border border-green-200 bg-green-50 p-8 text-center shadow-lg">
+            <div className="mb-4 text-5xl">🎉</div>
+            <h2 className="mb-2 text-2xl font-bold text-green-900">考试完成！</h2>
+            <p className="mb-6 text-3xl font-bold text-green-700">
+              得分：{score} 分
+            </p>
+            
+            {/* 统计信息 */}
+            <div className="mb-6 grid grid-cols-3 gap-4">
+              <div className="rounded-lg bg-white p-4">
+                <div className="text-2xl font-bold text-green-600">{correctCount}</div>
+                <div className="text-sm text-slate-600">正确</div>
+              </div>
+              <div className="rounded-lg bg-white p-4">
+                <div className="text-2xl font-bold text-red-600">{wrongCount}</div>
+                <div className="text-sm text-slate-600">错误</div>
+              </div>
+              <div className="rounded-lg bg-white p-4">
+                <div className="text-2xl font-bold text-slate-600">{unansweredCount}</div>
+                <div className="text-sm text-slate-600">未答</div>
+              </div>
+            </div>
+
+            <p className="mb-6 text-green-600">
+              {score && score >= 80
+                ? '太棒了！继续保持！'
+                : '发现了薄弱环节，系统已为你生成补短板计划'}
+            </p>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+              <button 
+                onClick={() => setShowResultDetail(true)}
+                className="rounded-lg border-2 border-green-600 bg-white px-6 py-3 font-bold text-green-600 hover:bg-green-50"
+              >
+                查看详细结果
+              </button>
+              <button 
+                onClick={() => onComplete ? onComplete() : router.push('/progress')}
+                className="rounded-lg bg-green-600 px-6 py-3 font-bold text-white hover:bg-green-700"
+              >
+                查看分析报告
+              </button>
+            </div>
+          </div>
+
+          {/* 详细结果视图 */}
+          {showResultDetail && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-slate-900">答题详情</h3>
+                <button
+                  onClick={() => setShowResultDetail(false)}
+                  className="flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900"
+                >
+                  <ArrowLeft size={16} />
+                  返回摘要
+                </button>
+              </div>
+
+              {questions.map((question, index) => {
+                const userAnswer = userAnswers[question.id] || ''
+                const isCorrect = userAnswer === question.correct_answer
+                const isAnswered = !!userAnswer
+
+                return (
+                  <div
+                    key={question.id}
+                    className={`rounded-xl border-2 p-6 ${
+                      isCorrect
+                        ? 'border-green-200 bg-green-50'
+                        : isAnswered
+                        ? 'border-red-200 bg-red-50'
+                        : 'border-slate-200 bg-slate-50'
+                    }`}
+                  >
+                    {/* 题目标题 */}
+                    <div className="mb-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white font-bold text-slate-700">
+                          {index + 1}
+                        </span>
+                        <span className="text-sm font-medium text-slate-600">
+                          {question.section_type === 'single_choice' && '单项选择'}
+                          {question.section_type === 'cloze' && '完形填空'}
+                          {question.section_type === 'reading' && '阅读理解'}
+                          {question.section_type === 'writing' && '写作'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isCorrect && (
+                          <span className="flex items-center gap-1 rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
+                            <CheckCircle2 size={16} />
+                            正确
+                          </span>
+                        )}
+                        {isAnswered && !isCorrect && (
+                          <span className="flex items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-sm font-medium text-red-700">
+                            <AlertCircle size={16} />
+                            错误
+                          </span>
+                        )}
+                        {!isAnswered && (
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
+                            未答
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 题目内容 */}
+                    <div className="mb-4 text-base leading-relaxed text-slate-900 markdown-content">
+                      <ReactMarkdown urlTransform={(url) => url} components={markdownComponents}>
+                        {String(question.content || '')}
+                      </ReactMarkdown>
+                    </div>
+
+                    {/* 选项 */}
+                    {question.options && Array.isArray(question.options) && (
+                      <div className="mb-4 space-y-2">
+                        {(question.options as string[]).map((option: string, optIndex: number) => {
+                          const optionLabel = String.fromCharCode(65 + optIndex)
+                          const isUserChoice = userAnswer === optionLabel
+                          const isCorrectAnswer = question.correct_answer === optionLabel
+
+                          return (
+                            <div
+                              key={optIndex}
+                              className={`rounded-lg border-2 p-3 ${
+                                isCorrectAnswer
+                                  ? 'border-green-500 bg-green-100'
+                                  : isUserChoice
+                                  ? 'border-red-500 bg-red-100'
+                                  : 'border-slate-200 bg-white'
+                              }`}
+                            >
+                              <span className="font-medium text-slate-700">
+                                {optionLabel}. {option}
+                                {isCorrectAnswer && (
+                                  <span className="ml-2 text-xs text-green-700">✓ 正确答案</span>
+                                )}
+                                {isUserChoice && !isCorrectAnswer && (
+                                  <span className="ml-2 text-xs text-red-700">✗ 你的答案</span>
+                                )}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* 主观题答案 */}
+                    {!question.options && (
+                      <div className="mb-4 space-y-2">
+                        <div className="rounded-lg border-2 border-green-500 bg-green-100 p-3">
+                          <div className="text-sm font-medium text-green-900">正确答案：</div>
+                          <div className="mt-1 text-sm text-green-700">
+                            {question.correct_answer || '（待评阅）'}
+                          </div>
+                        </div>
+                        {userAnswer && (
+                          <div className="rounded-lg border-2 border-blue-300 bg-blue-50 p-3">
+                            <div className="text-sm font-medium text-blue-900">你的答案：</div>
+                            <div className="mt-1 text-sm text-blue-700">{userAnswer}</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 解析 */}
+                    {question.analysis && (
+                      <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                        <h4 className="mb-2 flex items-center gap-2 text-sm font-bold text-blue-900">
+                          <span>📖</span> 解析
+                        </h4>
+                        <div className="text-sm leading-relaxed text-blue-800 markdown-content">
+                          <ReactMarkdown urlTransform={(url) => url} components={markdownComponents}>
+                            {String(question.analysis)}
+                          </ReactMarkdown>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
         
-        {/* 错题归因弹窗 (放在这里以防 Result 页面下也需要显示) */}
+        {/* 错题归因弹窗 */}
         {showAttribution && currentWrongQuestion && (
           <AttributionDialog
             question={currentWrongQuestion}
