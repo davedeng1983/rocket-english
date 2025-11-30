@@ -131,7 +131,9 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
   }, [questions])
 
   const handleStartExam = (startIndex: number = 0) => {
-    setCurrentIndex(startIndex)
+    // 确保索引有效
+    const safeIndex = Math.max(0, Math.min(startIndex, questions.length - 1))
+    setCurrentIndex(safeIndex)
     setViewState('running')
   }
 
@@ -401,6 +403,24 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
   }
 
   // === 视图 2: 考试进行中 (原 Question View) ===
+  // 关键防护：如果当前题目不存在，直接返回错误提示
+  if (viewState === 'running' && !currentQuestion) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="mb-4 text-2xl">⚠️</div>
+          <p className="text-slate-600">题目加载失败，请返回重试</p>
+          <button
+            onClick={() => setViewState('overview')}
+            className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+          >
+            返回概览
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   const isSplitView = currentQuestion && 
     (currentQuestion.section_type === 'cloze' || currentQuestion.section_type === 'reading') && 
     currentQuestion.meta && 
@@ -513,13 +533,13 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
                 <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg">
                     <div className="mb-4 flex items-center justify-between">
                     <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700">
-                        {currentQuestion.section_type === 'single_choice'
+                        {currentQuestion?.section_type === 'single_choice'
                         ? '单选题'
-                        : currentQuestion.section_type === 'cloze'
+                        : currentQuestion?.section_type === 'cloze'
                         ? '完形填空'
-                        : currentQuestion.section_type === 'writing'
+                        : currentQuestion?.section_type === 'writing'
                         ? '书面表达'
-                        : (currentQuestion.options ? '阅读理解' : '阅读表达')}
+                        : (currentQuestion?.options && Array.isArray(currentQuestion.options) && currentQuestion.options.length > 0 ? '阅读理解' : '阅读表达')}
                     </span>
                     {/* 显示题号 */}
                     <span className="flex items-center justify-center rounded-md bg-blue-600 px-2.5 py-1 text-sm font-bold text-white shadow-sm">
@@ -571,18 +591,20 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
                             <img 
                                 {...props} 
                                 className="my-4 max-h-[400px] max-w-full rounded-lg border border-slate-200 object-contain shadow-sm"
-                                onError={(e) => console.error('Image load error:', typeof props.src === 'string' ? props.src.substring(0, 50) + '...' : 'Blob image')}
+                                onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                }}
                             />
                             ),
                             p: ({ node, ...props }) => <p className="mb-4" {...props} />
                         }}
                     >
-                        {currentQuestion.content}
+                        {currentQuestion?.content || '题目内容加载中...'}
                     </ReactMarkdown>
                     </div>
 
                     {/* 选项 */}
-                    {currentQuestion.options && Array.isArray(currentQuestion.options) ? (
+                    {currentQuestion?.options && Array.isArray(currentQuestion.options) && currentQuestion.options.length > 0 ? (
                     <div className="space-y-3">
                         {(currentQuestion.options as string[]).map((option: string, index: number) => {
                         const optionLabel = String.fromCharCode(65 + index) // A, B, C, D
@@ -599,7 +621,7 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
                             }`}
                             >
                             <span className="font-medium text-slate-700">
-                                {optionLabel}. {option}
+                                {optionLabel}. {String(option || '')}
                             </span>
                             </button>
                         )
@@ -609,7 +631,7 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
                         // 无选项题目（主观题）的输入框
                         <div className="mt-4">
                             <textarea
-                                value={userAnswers[currentQuestion.id] || ''}
+                                value={userAnswers[currentQuestion?.id || ''] || ''}
                                 onChange={(e) => handleSelectAnswer(e.target.value)}
                                 placeholder="请输入你的答案..."
                                 className="w-full rounded-lg border border-slate-300 p-4 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
