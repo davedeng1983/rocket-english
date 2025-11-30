@@ -101,9 +101,9 @@ export default function ProfilePage() {
       
       setIsEditing(false)
       alert('保存成功')
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving profile:', error)
-      alert('保存失败')
+      alert(`保存失败: ${error.message || '未知错误'}`)
     } finally {
       setSaving(false)
     }
