@@ -76,10 +76,16 @@ export default function Navbar() {
         <div className="flex items-center gap-4">
           {user ? (
             <div className="flex items-center gap-4">
-              <div className="hidden md:flex flex-col items-end">
+              <Link href="/profile" className="hidden md:flex flex-col items-end transition hover:opacity-70">
                 <span className="text-sm font-medium text-slate-900">{user.email?.split('@')[0]}</span>
-                <span className="text-xs text-slate-500">初三备考中</span>
-              </div>
+                <span className="text-xs text-slate-500">个人中心</span>
+              </Link>
+              
+              {/* Mobile Profile Icon */}
+              <Link href="/profile" className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition hover:bg-blue-50 hover:text-blue-600 md:hidden">
+                 <User className="h-4 w-4" />
+              </Link>
+
               <button
                 onClick={handleSignOut}
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition hover:bg-red-50 hover:text-red-600"
