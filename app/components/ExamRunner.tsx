@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { getCurrentUser } from '@/lib/supabase/auth'
 import type { Question } from '@/lib/supabase/types'
@@ -45,6 +45,95 @@ const markdownComponents = {
   ),
   p: ({ node, ...props }: any) => <p className="mb-4" {...props} />,
 };
+
+// 高亮文章中当前题号的自定义组件
+function HighlightedArticle({ content, questionNumber }: { content: string; questionNumber: number }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!containerRef.current || !content) return;
+
+    // 清除之前的高亮
+    const existingHighlights = containerRef.current.querySelectorAll('.question-number-highlight');
+    existingHighlights.forEach(el => {
+      const parent = el.parentNode;
+      if (parent) {
+        parent.replaceChild(document.createTextNode(el.textContent || ''), el);
+        parent.normalize();
+      }
+    });
+
+    // 查找并高亮当前题号
+    const pattern = new RegExp(
+      `(^|[^0-9])(?:\\(\\s*${questionNumber}\\s*\\)|（\\s*${questionNumber}\\s*）|\\[\\s*${questionNumber}\\s*\\]|${questionNumber}\\s*[.．、])`,
+      'g'
+    );
+
+    const walker = document.createTreeWalker(
+      containerRef.current,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode: (node) => {
+          // 跳过已经在高亮元素内的文本
+          if (node.parentElement?.classList.contains('question-number-highlight')) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      }
+    );
+
+    const replacements: Array<{ node: Text; before: string; highlight: string; after: string }> = [];
+    let node;
+    
+    while ((node = walker.nextNode())) {
+      const text = node.nodeValue || '';
+      pattern.lastIndex = 0; // 重置正则
+      const matches = Array.from(text.matchAll(pattern));
+      
+      if (matches.length > 0) {
+        const lastMatch = matches[matches.length - 1]; // 只处理最后一个匹配，避免重复
+        const index = lastMatch.index!;
+        const prefix = lastMatch[1] || '';
+        const match = lastMatch[0];
+        
+        replacements.push({
+          node: node as Text,
+          before: text.substring(0, index + prefix.length),
+          highlight: text.substring(index + prefix.length, index + match.length),
+          after: text.substring(index + match.length)
+        });
+      }
+    }
+
+    // 执行替换（从后往前，避免索引变化）
+    replacements.forEach(({ node, before, highlight, after }) => {
+      const parent = node.parentElement;
+      if (!parent) return;
+
+      const fragment = document.createDocumentFragment();
+      if (before) fragment.appendChild(document.createTextNode(before));
+      
+      const highlightSpan = document.createElement('mark');
+      highlightSpan.className = 'question-number-highlight';
+      highlightSpan.style.cssText = 'background-color: #fef08a; color: #854d0e; padding: 0 0.25rem; border-radius: 0.25rem; font-weight: 600;';
+      highlightSpan.textContent = highlight;
+      fragment.appendChild(highlightSpan);
+      
+      if (after) fragment.appendChild(document.createTextNode(after));
+
+      parent.replaceChild(fragment, node);
+    });
+  }, [content, questionNumber]); // 只依赖稳定的字符串和数字
+
+  return (
+    <div ref={containerRef} className="markdown-content">
+      <ReactMarkdown urlTransform={(url) => url} components={markdownComponents}>
+        {String(content || '')}
+      </ReactMarkdown>
+    </div>
+  );
+}
 
 export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
   const router = useRouter()
@@ -493,13 +582,8 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
                         <BookOpen className="text-blue-500" size={20} />
                         <h3 className="font-bold text-slate-700">阅读材料</h3>
                     </div>
-                    <div className="text-base leading-relaxed text-slate-700 markdown-content">
-                        <ReactMarkdown
-                            urlTransform={(url) => url}
-                            components={markdownComponents}
-                        >
-                            {String(articleContent || '')}
-                        </ReactMarkdown>
+                    <div className="text-base leading-relaxed text-slate-700">
+                        <HighlightedArticle content={articleContent} questionNumber={currentIndex + 1} />
                     </div>
                 </div>
             )}
@@ -530,14 +614,9 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
                     typeof currentQuestion.meta === 'object' && 
                     'article' in currentQuestion.meta && 
                     (currentQuestion.meta as any).article && (
-                        <div className={`mb-6 rounded-lg bg-slate-50 p-4 text-sm leading-relaxed text-slate-700 markdown-content ${isSplitView ? 'lg:hidden' : ''}`}>
+                        <div className={`mb-6 rounded-lg bg-slate-50 p-4 text-sm leading-relaxed text-slate-700 ${isSplitView ? 'lg:hidden' : ''}`}>
                             <h4 className="mb-2 font-bold text-slate-500">阅读材料</h4>
-                            <ReactMarkdown
-                                urlTransform={(url) => url}
-                                components={markdownComponents}
-                            >
-                                {String(articleContent || '')}
-                            </ReactMarkdown>
+                            <HighlightedArticle content={articleContent} questionNumber={currentIndex + 1} />
                         </div>
                     )}
 
