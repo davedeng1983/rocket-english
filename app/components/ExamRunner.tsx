@@ -349,10 +349,8 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
       setWaitingForAttribution(true)
       setCurrentWrongQuestion(currentQuestion)
       setShowAttribution(true)
-    } else {
-      // 答对了，可以自动继续下一题（可选）或者等用户点击下一题
-      // 这里先不自动跳转，让用户自己控制
     }
+    // 答对了，不需要额外操作，让用户点击"下一题"继续
   }
 
   const handleNext = () => {
@@ -440,26 +438,44 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
       
       setViewState('result')
       
+      // 保存 attemptId 以便后续使用
+      ;(window as any).__currentAttemptId = attempt.id
+
+      // 保存所有临时存储的归因信息到数据库
+      if (pendingAttributions.length > 0) {
+        console.log('保存', pendingAttributions.length, '条归因信息到数据库')
+        
+        // 批量保存归因信息
+        for (const attr of pendingAttributions) {
+          try {
+            await fetch('/api/learning-gaps/create', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                questionId: attr.questionId,
+                attemptId: attempt.id,
+                gapType: attr.gapType,
+                gapDetail: attr.gapDetail,
+                userAnswer: attr.userAnswer,
+                correctAnswer: attr.correctAnswer,
+              }),
+            })
+          } catch (error) {
+            console.error('Failed to save attribution:', error)
+          }
+        }
+        
+        // 清空临时存储
+        setPendingAttributions([])
+      }
+
       // 刷新完成的部分列表
       loadCompletedSections()
 
-      // 如果有错题，延迟显示归因弹窗，先让用户看到结果页面
-      if (wrongQuestions.length > 0) {
-        // 保存 attemptId 以便后续使用
-        ;(window as any).__currentAttemptId = attempt.id
-        // 自动展开详细结果，让用户立即看到错题
-        setShowResultDetail(true)
-        // 延迟 3 秒显示归因弹窗，让用户先看到结果页面
-        // 给用户足够时间查看结果
-        setTimeout(() => {
-          console.log('🔵 延迟3秒后，显示归因对话框')
-          setCurrentWrongQuestion(wrongQuestions[0])
-          setShowAttribution(true)
-        }, 3000)
-      } else {
-        // 没有错题，但也要显示结果页面，让用户查看
-        // 不自动调用 onComplete，让用户主动选择何时退出
-      }
+      // 自动展开详细结果
+      setShowResultDetail(true)
+      
+      // 不自动弹出归因对话框，因为已经在答题过程中实时收集了
     } catch (error) {
       console.error('Failed to submit exam:', error)
       alert('提交失败，请重试')
@@ -1037,25 +1053,65 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
                     </ReactMarkdown>
                     </div>
 
+                    {/* 实时对错反馈 */}
+                    {questionStatus[currentQuestion?.id || ''] && (
+                      <div className={`mb-4 rounded-lg border-2 p-4 ${
+                        questionStatus[currentQuestion.id].isCorrect
+                          ? 'border-green-500 bg-green-50'
+                          : 'border-red-500 bg-red-50'
+                      }`}>
+                        <div className="flex items-center gap-2">
+                          {questionStatus[currentQuestion.id].isCorrect ? (
+                            <>
+                              <CheckCircle2 className="text-green-600" size={24} />
+                              <span className="text-lg font-bold text-green-700">答对了！</span>
+                            </>
+                          ) : (
+                            <>
+                              <AlertCircle className="text-red-600" size={24} />
+                              <span className="text-lg font-bold text-red-700">答错了</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {/* 选项 */}
                     {currentQuestion?.options && Array.isArray(currentQuestion.options) && currentQuestion.options.length > 0 ? (
                     <div className="space-y-3">
                         {(currentQuestion.options as string[]).map((option: string, index: number) => {
                         const optionLabel = String.fromCharCode(65 + index) // A, B, C, D
                         const isSelected = userAnswers[currentQuestion.id] === optionLabel
+                        const status = questionStatus[currentQuestion.id]
+                        const isCorrect = status?.isCorrect
+                        const isWrong = status && !status.isCorrect
+                        const isCorrectAnswer = optionLabel === currentQuestion.correct_answer
 
                         return (
                             <button
                             key={index}
                             onClick={() => handleSelectAnswer(optionLabel)}
+                            disabled={!!status} // 已回答后禁用选项
                             className={`w-full rounded-lg border-2 p-4 text-left transition ${
-                                isSelected
+                                isCorrect && isSelected
+                                ? 'border-green-500 bg-green-100'
+                                : isWrong && isSelected
+                                ? 'border-red-500 bg-red-100'
+                                : isCorrectAnswer && status
+                                ? 'border-green-300 bg-green-50'
+                                : isSelected
                                 ? 'border-blue-500 bg-blue-50'
                                 : 'border-slate-200 bg-white hover:border-slate-300'
-                            }`}
+                            } ${status ? 'cursor-default' : 'cursor-pointer'}`}
                             >
                             <span className="font-medium text-slate-700">
                                 {optionLabel}. {String(option || '')}
+                                {isCorrectAnswer && status && (
+                                  <span className="ml-2 text-sm text-green-600">✓ 正确答案</span>
+                                )}
+                                {isWrong && isSelected && (
+                                  <span className="ml-2 text-sm text-red-600">✗ 你的答案</span>
+                                )}
                             </span>
                             </button>
                         )
@@ -1096,7 +1152,8 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
                     ) : (
                         <button
                         onClick={handleNext}
-                        className="rounded-lg bg-blue-600 px-6 py-2 font-medium text-white transition hover:bg-blue-700"
+                        disabled={waitingForAttribution || !!questionStatus[currentQuestion?.id || '']}
+                        className="rounded-lg bg-blue-600 px-6 py-2 font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                         下一题
                         </button>
