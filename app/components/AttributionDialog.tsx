@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import ReactMarkdown from 'react-markdown'
 import type { Question } from '@/lib/supabase/types'
 import KnowledgePointSelector from './KnowledgePointSelector'
 import ErrorOptionsSelector from './ErrorOptionsSelector'
@@ -26,9 +27,45 @@ export default function AttributionDialog({
   onComplete,
   onSkip,
 }: AttributionDialogProps) {
+  // 防御性检查：确保 question 存在且有内容
+  if (!question) {
+    console.error('AttributionDialog: question is null or undefined')
+    return null
+  }
+
   const [selectedType, setSelectedType] = useState<'vocab' | 'grammar' | 'logic' | 'careless' | null>(null)
   const [gapDetail, setGapDetail] = useState('')
   const [showKnowledgePoints, setShowKnowledgePoints] = useState(false) // 是否显示知识点选择
+
+  // 格式化题目内容：确保有内容显示
+  const displayContent = question.content 
+    ? String(question.content).trim() 
+    : '(题目内容加载中...)'
+
+  // 格式化正确答案：如果为空，尝试从选项中获取
+  const formatCorrectAnswer = (): string => {
+    if (correctAnswer && correctAnswer.trim()) {
+      return correctAnswer.trim()
+    }
+    
+    // 如果 correctAnswer 为空，尝试从 question.correct_answer 获取
+    if (question.correct_answer && question.correct_answer.trim()) {
+      const answer = question.correct_answer.trim()
+      // 如果是选项字母，尝试格式化
+      if (question.options && Array.isArray(question.options)) {
+        const optionIndex = answer.charCodeAt(0) - 65 // A=0, B=1, C=2, D=3
+        if (optionIndex >= 0 && optionIndex < question.options.length) {
+          const optionText = question.options[optionIndex]
+          return `${answer}. ${optionText}`
+        }
+      }
+      return answer
+    }
+    
+    return '(未设置正确答案)'
+  }
+
+  const formattedCorrectAnswer = formatCorrectAnswer()
 
   const handleSubmit = () => {
     if (selectedType && gapDetail.trim()) {
@@ -82,16 +119,24 @@ export default function AttributionDialog({
 
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4">
           <p className="mb-2 text-sm font-medium text-red-900">题目：</p>
-          <p className="mb-3 text-sm text-slate-700">{question.content}</p>
+          <div className="mb-3 text-sm text-slate-700 markdown-content">
+            {displayContent ? (
+              <ReactMarkdown urlTransform={(url) => url}>
+                {displayContent}
+              </ReactMarkdown>
+            ) : (
+              <span className="text-slate-400 italic">(题目内容加载中...)</span>
+            )}
+          </div>
           <div className="flex gap-4 text-sm">
             <div>
               <span className="font-medium text-red-600">你的答案：</span>
-              <span className="ml-2 text-slate-700">{userAnswer}</span>
+              <span className="ml-2 text-slate-700">{userAnswer || '(未作答)'}</span>
             </div>
             <div>
               <span className="font-medium text-green-600">正确答案：</span>
               <span className="ml-2 text-slate-700">
-                {correctAnswer || '(未设置正确答案)'}
+                {formattedCorrectAnswer}
               </span>
             </div>
           </div>
@@ -153,13 +198,13 @@ export default function AttributionDialog({
             
             <ErrorOptionsSelector
               gapType={selectedType}
-              questionContent={String(question.content || '')}
+              questionContent={displayContent}
               questionOptions={
                 question.options && Array.isArray(question.options)
                   ? question.options.map(String)
                   : undefined
               }
-              correctAnswer={correctAnswer || undefined}
+              correctAnswer={formattedCorrectAnswer !== '(未设置正确答案)' ? formattedCorrectAnswer : undefined}
               userAnswer={userAnswer || undefined}
               article={
                 question.meta && typeof question.meta === 'object' && 'article' in question.meta

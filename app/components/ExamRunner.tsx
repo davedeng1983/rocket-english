@@ -346,6 +346,11 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
 
     // 如果答错了，立即弹出归因对话框
     if (!isCorrect) {
+      // 确保题目数据完整
+      if (!currentQuestion || !currentQuestion.id) {
+        console.error('Cannot show attribution: question data is incomplete', currentQuestion)
+        return
+      }
       setWaitingForAttribution(true)
       setCurrentWrongQuestion(currentQuestion)
       setShowAttribution(true)
@@ -1175,6 +1180,12 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
 
       {/* 错题归因弹窗 (Running 状态下显示 - 实时归因模式) */}
       {showAttribution && currentWrongQuestion && viewState === 'running' && (() => {
+        // 防御性检查：确保题目数据完整
+        if (!currentWrongQuestion || !currentWrongQuestion.id) {
+          console.error('Cannot show attribution: currentWrongQuestion is invalid', currentWrongQuestion)
+          return null
+        }
+
         // 格式化正确答案显示：如果是选项字母，显示完整选项内容
         let formattedCorrectAnswer = currentWrongQuestion.correct_answer || ''
         if (currentWrongQuestion.options && Array.isArray(currentWrongQuestion.options) && formattedCorrectAnswer) {

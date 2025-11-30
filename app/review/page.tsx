@@ -427,23 +427,41 @@ export default function ReviewPage() {
       </div>
 
       {/* 错题归因弹窗 */}
-      {showAttribution && currentWrongQuestion && (
-        <AttributionDialog
-          question={currentWrongQuestion}
-          userAnswer={userAnswers[currentWrongQuestion.id] || ''}
-          correctAnswer={currentWrongQuestion.correct_answer || ''}
-          attemptId="" // 复习模式不需要 attemptId
-          onComplete={handleAttributionComplete}
-          onSkip={() => {
-            setShowAttribution(false)
-            if (currentIndex < gaps.length - 1) {
-              setCurrentIndex(currentIndex + 1)
-            } else {
-              setReviewCompleted(true)
-            }
-          }}
-        />
-      )}
+      {showAttribution && currentWrongQuestion && (() => {
+        // 防御性检查：确保题目数据完整
+        if (!currentWrongQuestion || !currentWrongQuestion.id) {
+          console.error('Cannot show attribution: currentWrongQuestion is invalid', currentWrongQuestion)
+          return null
+        }
+
+        // 格式化正确答案显示：如果是选项字母，显示完整选项内容
+        let formattedCorrectAnswer = currentWrongQuestion.correct_answer || ''
+        if (currentWrongQuestion.options && Array.isArray(currentWrongQuestion.options) && formattedCorrectAnswer) {
+          const correctIndex = formattedCorrectAnswer.charCodeAt(0) - 65 // A=0, B=1, C=2, D=3
+          if (correctIndex >= 0 && correctIndex < currentWrongQuestion.options.length) {
+            const optionText = currentWrongQuestion.options[correctIndex]
+            formattedCorrectAnswer = `${formattedCorrectAnswer}. ${optionText}`
+          }
+        }
+
+        return (
+          <AttributionDialog
+            question={currentWrongQuestion}
+            userAnswer={userAnswers[currentWrongQuestion.id] || ''}
+            correctAnswer={formattedCorrectAnswer}
+            attemptId="" // 复习模式不需要 attemptId
+            onComplete={handleAttributionComplete}
+            onSkip={() => {
+              setShowAttribution(false)
+              if (currentIndex < gaps.length - 1) {
+                setCurrentIndex(currentIndex + 1)
+              } else {
+                setReviewCompleted(true)
+              }
+            }}
+          />
+        )
+      })()}
     </div>
   )
 }
