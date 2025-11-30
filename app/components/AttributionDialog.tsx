@@ -59,7 +59,9 @@ export default function AttributionDialog({
             </div>
             <div>
               <span className="font-medium text-green-600">正确答案：</span>
-              <span className="ml-2 text-slate-700">{correctAnswer}</span>
+              <span className="ml-2 text-slate-700">
+                {correctAnswer || '(未设置正确答案)'}
+              </span>
             </div>
           </div>
         </div>
