@@ -1,16 +1,34 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { getCurrentUser } from '@/lib/supabase/auth'
-// 使用 API 路由获取数据，不再直接导入
-// 使用 API 路由保存数据
 import type { Question } from '@/lib/supabase/types'
 import AttributionDialog from './AttributionDialog'
+import { 
+  CheckCircle2, 
+  BookOpen, 
+  PenTool, 
+  FileText, 
+  Play, 
+  Clock,
+  AlertCircle,
+  ChevronRight,
+  List,
+  ArrowLeft
+} from 'lucide-react'
 
 interface ExamRunnerProps {
   paperId: string
   onComplete?: () => void
+}
+
+interface SectionGroup {
+  id: string
+  title: string
+  icon: any
+  questions: Question[]
+  startIndex: number
 }
 
 export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
@@ -24,6 +42,7 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [examCompleted, setExamCompleted] = useState(false)
   const [score, setScore] = useState<number | null>(null)
+  const [viewState, setViewState] = useState<'overview' | 'running' | 'result'>('overview')
 
   useEffect(() => {
     loadExamData()
@@ -60,6 +79,59 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
     } catch (error) {
       console.error('Failed to load exam data:', error)
     }
+  }
+
+  // 计算试卷结构分组
+  const sections = useMemo(() => {
+    const groups: SectionGroup[] = []
+    let currentGroup: SectionGroup | null = null
+    
+    questions.forEach((q, index) => {
+      let typeKey = q.section_type
+      let title = '其他题目'
+      let icon = FileText
+
+      if (typeKey === 'single_choice') {
+        title = '单项选择'
+        icon = CheckCircle2
+      } else if (typeKey === 'cloze') {
+        title = '完形填空'
+        icon = List
+      } else if (typeKey === 'reading') {
+        if (q.options && Array.isArray(q.options) && q.options.length > 0) {
+          title = '阅读理解'
+          icon = BookOpen
+        } else {
+          title = '阅读表达'
+          icon = BookOpen
+        }
+      } else if (typeKey === 'writing') {
+        title = '书面表达'
+        icon = PenTool
+      }
+
+      // 如果当前没有分组，或者分组标题变了，创建新分组
+      if (!currentGroup || currentGroup.title !== title) {
+        // 只有当上一个分组有内容时才推入（其实 always true except first）
+        currentGroup = {
+          id: `${typeKey}_${index}`,
+          title,
+          icon,
+          questions: [],
+          startIndex: index
+        }
+        groups.push(currentGroup)
+      }
+
+      currentGroup.questions.push(q)
+    })
+
+    return groups
+  }, [questions])
+
+  const handleStartExam = (startIndex: number = 0) => {
+    setCurrentIndex(startIndex)
+    setViewState('running')
   }
 
   const handleSelectAnswer = (answer: string) => {
@@ -133,6 +205,7 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
 
       setScore(Math.round((correctCount! / totalQuestions!) * 100))
       setExamCompleted(true)
+      setViewState('result')
 
       // 如果有错题，显示归因弹窗
       if (wrongQuestions.length > 0) {
@@ -206,18 +279,87 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
 
   const currentQuestion = questions[currentIndex]
 
-  if (!currentQuestion && questions.length === 0) {
+  if (!paper || questions.length === 0) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
           <div className="mb-4 text-2xl">⏳</div>
-          <p className="text-slate-600">加载题目中...</p>
+          <p className="text-slate-600">加载试卷中...</p>
         </div>
       </div>
     )
   }
 
-  if (examCompleted) {
+  // === 视图 1: 试卷概览 ===
+  if (viewState === 'overview') {
+    return (
+      <div className="min-h-screen bg-slate-50 pb-12">
+        {/* 头部 */}
+        <div className="bg-white px-4 py-8 shadow-sm">
+          <div className="container mx-auto max-w-3xl">
+            <button 
+              onClick={() => router.back()}
+              className="mb-4 flex items-center text-sm text-slate-500 hover:text-slate-800"
+            >
+              <ArrowLeft size={16} className="mr-1" />
+              返回列表
+            </button>
+            <h1 className="mb-2 text-2xl font-bold text-slate-900">{paper.title}</h1>
+            <div className="flex items-center gap-4 text-sm text-slate-500">
+               <span className="flex items-center gap-1"><Clock size={14}/> {paper.year || '年份未知'}</span>
+               <span>{paper.region || '地区未知'}</span>
+               <span>共 {questions.length} 题</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 大题列表 */}
+        <div className="container mx-auto mt-8 max-w-3xl px-4">
+          <h2 className="mb-4 text-lg font-semibold text-slate-800">试卷结构</h2>
+          <div className="space-y-4">
+            {sections.map((section, idx) => (
+              <div 
+                key={section.id}
+                className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-300 hover:shadow-md"
+                onClick={() => handleStartExam(section.startIndex)}
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                    <section.icon size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900">{section.title}</h3>
+                    <p className="text-sm text-slate-500">
+                      {section.questions.length} 道题 
+                      <span className="mx-2 text-slate-300">|</span>
+                      第 {section.startIndex + 1} - {section.startIndex + section.questions.length} 题
+                    </p>
+                  </div>
+                </div>
+                <div className="rounded-full bg-slate-50 p-2 text-slate-400">
+                   <Play size={20} className="ml-0.5" />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* 开始按钮 */}
+          <div className="mt-10 flex justify-center">
+            <button
+              onClick={() => handleStartExam(0)}
+              className="flex w-full max-w-md items-center justify-center gap-2 rounded-xl bg-blue-600 py-4 text-lg font-bold text-white shadow-lg transition hover:bg-blue-700 hover:shadow-xl active:scale-95"
+            >
+              <Play size={24} />
+              开始整卷测试
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // === 视图 3: 考试结果 ===
+  if (viewState === 'result') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-white to-slate-50 px-4">
         <div className="w-full max-w-md rounded-2xl border border-green-200 bg-green-50 p-8 text-center shadow-lg">
@@ -231,16 +373,49 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
               ? '太棒了！继续保持！'
               : '发现了薄弱环节，系统已为你生成补短板计划'}
           </p>
+          <button 
+            onClick={() => onComplete ? onComplete() : router.push('/progress')}
+            className="mt-8 w-full rounded-lg bg-green-600 py-3 font-bold text-white hover:bg-green-700"
+          >
+            查看分析报告
+          </button>
         </div>
+        
+        {/* 错题归因弹窗 (放在这里以防 Result 页面下也需要显示) */}
+        {showAttribution && currentWrongQuestion && (
+          <AttributionDialog
+            question={currentWrongQuestion}
+            userAnswer={userAnswers[currentWrongQuestion.id] || ''}
+            correctAnswer={currentWrongQuestion.correct_answer || ''}
+            attemptId={(window as any).__currentAttemptId || ''}
+            onComplete={handleAttributionComplete}
+            onSkip={() => {
+              setShowAttribution(false)
+              if (onComplete) onComplete()
+            }}
+          />
+        )}
       </div>
     )
   }
 
+  // === 视图 2: 考试进行中 (原 Question View) ===
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-slate-50">
       <div className="container mx-auto max-w-3xl px-4 py-8">
-        {/* 进度条 */}
+        {/* 顶部栏：返回概览 + 进度 */}
         <div className="mb-6">
+          <button 
+             onClick={() => {
+               if (window.confirm('退出考试将不保存进度，确定退出吗？')) {
+                 setViewState('overview')
+               }
+             }}
+             className="mb-4 flex items-center text-xs text-slate-400 hover:text-slate-600"
+          >
+             <ArrowLeft size={12} className="mr-1" /> 退出考试
+          </button>
+
           <div className="mb-2 flex justify-between text-sm text-slate-600">
             <span>题目 {currentIndex + 1} / {questions.length}</span>
             <span>
@@ -260,24 +435,36 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
         {/* 题目卡片 */}
         {currentQuestion && (
           <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-lg">
-            <div className="mb-4">
+            <div className="mb-4 flex items-center justify-between">
               <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700">
                 {currentQuestion.section_type === 'single_choice'
                   ? '单选题'
-                  : currentQuestion.section_type === 'reading'
-                  ? '阅读理解'
-                  : currentQuestion.section_type}
+                  : currentQuestion.section_type === 'cloze'
+                  ? '完形填空'
+                  : currentQuestion.section_type === 'writing'
+                  ? '书面表达'
+                  : (currentQuestion.options ? '阅读理解' : '阅读表达')}
               </span>
+              {/* 显示题号 */}
+              <span className="text-sm font-bold text-slate-300">#{currentIndex + 1}</span>
             </div>
+            
+            {/* 如果有前置文章（如阅读理解/完形），显示文章 */}
+            {currentQuestion.meta?.article && (
+                 <div className="mb-6 rounded-lg bg-slate-50 p-4 text-sm leading-relaxed text-slate-700">
+                     <h4 className="mb-2 font-bold text-slate-500">阅读材料</h4>
+                     <p className="whitespace-pre-wrap">{currentQuestion.meta.article}</p>
+                 </div>
+            )}
 
             <div className="mb-6">
-              <p className="text-lg leading-relaxed text-slate-900">
+              <p className="text-lg leading-relaxed text-slate-900 whitespace-pre-wrap">
                 {currentQuestion.content}
               </p>
             </div>
 
             {/* 选项 */}
-            {currentQuestion.options && Array.isArray(currentQuestion.options) && (
+            {currentQuestion.options && Array.isArray(currentQuestion.options) ? (
               <div className="space-y-3">
                 {(currentQuestion.options as string[]).map((option: string, index: number) => {
                   const optionLabel = String.fromCharCode(65 + index) // A, B, C, D
@@ -300,6 +487,17 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
                   )
                 })}
               </div>
+            ) : (
+                // 无选项题目（主观题）的输入框
+                <div className="mt-4">
+                    <textarea
+                        value={userAnswers[currentQuestion.id] || ''}
+                        onChange={(e) => handleSelectAnswer(e.target.value)}
+                        placeholder="请输入你的答案..."
+                        className="w-full rounded-lg border border-slate-300 p-4 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        rows={5}
+                    />
+                </div>
             )}
           </div>
         )}
@@ -333,7 +531,7 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
         </div>
       </div>
 
-      {/* 错题归因弹窗 */}
+      {/* 错题归因弹窗 (Running 状态下显示) */}
       {showAttribution && currentWrongQuestion && (
         <AttributionDialog
           question={currentWrongQuestion}
@@ -350,4 +548,3 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
     </div>
   )
 }
-
