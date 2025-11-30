@@ -80,49 +80,6 @@ export async function POST(request: Request) {
       )
     }
 
-    // FORCE DEBUG MODE: Always return debug text even on success
-    // 临时修改：为了调试漏题，即使成功也返回 debug_text
-    if (questions.length > 0) {
-         console.log(`Extracted ${questions.length} questions.`)
-         const splitPoint = Math.floor(text.length * 0.4) 
-         // 注意：这里我们实际上不直接返回 response 结束，
-         // 而是继续执行插入逻辑，最后在成功的 response 里附带 debug_text
-         // 所以把这段逻辑移到函数最后
-    }
-
-    // 2. 批量创建题目
-      console.log('Parsed Text Sample:', text.substring(0, 1000)) // Log to server console
-      return NextResponse.json(
-        { 
-            error: '未能从文档中提取到题目。',
-            debug_text: text.substring(0, 800) // Return raw text to client for debugging
-        },
-        { status: 400 }
-      )
-    }
-
-    // 1. 创建试卷记录
-    const { data: examPaper, error: paperError } = await supabase
-      .from('exam_papers')
-      .insert({
-        title,
-        year: metadata.year,
-        region: metadata.region,
-        structure_map: {
-          sections: [],
-          total_questions: questions.length,
-        },
-      })
-      .select()
-      .single()
-
-    if (paperError || !examPaper) {
-      return NextResponse.json(
-        { error: paperError?.message || 'Failed to create exam paper' },
-        { status: 500 }
-      )
-    }
-
     // 2. 批量创建题目
     const questionsToInsert = questions.map((q, index) => ({
       paper_id: examPaper.id,
