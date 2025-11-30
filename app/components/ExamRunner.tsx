@@ -454,16 +454,44 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
              typeof currentQuestion.meta === 'object' && 
              'article' in currentQuestion.meta && 
              (currentQuestion.meta as any).article && (
-                 <div className="mb-6 rounded-lg bg-slate-50 p-4 text-sm leading-relaxed text-slate-700">
+                 <div className="mb-6 rounded-lg bg-slate-50 p-4 text-sm leading-relaxed text-slate-700 markdown-content">
                      <h4 className="mb-2 font-bold text-slate-500">阅读材料</h4>
-                     <p className="whitespace-pre-wrap">{(currentQuestion.meta as any).article}</p>
+                     <ReactMarkdown
+                        components={{
+                          img: ({ node, ...props }) => (
+                            <img 
+                              {...props} 
+                              className="my-4 max-h-[400px] max-w-full rounded-lg border border-slate-200 object-contain shadow-sm"
+                            />
+                          ),
+                          p: ({ node, ...props }) => <p className="mb-4" {...props} />
+                        }}
+                     >
+                        {(currentQuestion.meta as any).article}
+                     </ReactMarkdown>
                  </div>
             )}
 
+import ReactMarkdown from 'react-markdown'
+
+// ... existing code ...
+
             <div className="mb-6">
-              <p className="text-lg leading-relaxed text-slate-900 whitespace-pre-wrap">
-                {currentQuestion.content}
-              </p>
+              <div className="text-lg leading-relaxed text-slate-900 markdown-content">
+                <ReactMarkdown
+                  components={{
+                    img: ({ node, ...props }) => (
+                      <img 
+                        {...props} 
+                        className="my-4 max-h-[400px] max-w-full rounded-lg border border-slate-200 object-contain shadow-sm"
+                      />
+                    ),
+                    p: ({ node, ...props }) => <p className="mb-4" {...props} />
+                  }}
+                >
+                  {currentQuestion.content}
+                </ReactMarkdown>
+              </div>
             </div>
 
             {/* 选项 */}
