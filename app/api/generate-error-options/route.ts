@@ -97,7 +97,6 @@ ${questionOptions ? `选项：${questionOptions.join(' | ')}` : ''}
 
 只返回JSON，不要其他文字。`
     }
-  }
   } else if (gapType === 'grammar') {
     prompt = `作为初三英语老师，请仔细分析以下题目，识别学生可能不理解的语法点，生成3-5个具体的语法问题选项。
 
@@ -207,7 +206,6 @@ ${correctAnswer ? `正确答案：${correctAnswer}` : ''}
 
 只返回JSON，不要其他文字。`
     }
-  }
   }
 
   try {
