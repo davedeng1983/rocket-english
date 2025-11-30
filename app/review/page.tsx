@@ -247,6 +247,7 @@ export default function ReviewPage() {
               {currentGap.gap_type === 'vocab' && '📚 生词'}
               {currentGap.gap_type === 'grammar' && '📖 语法'}
               {currentGap.gap_type === 'logic' && '🧠 逻辑'}
+              {currentGap.gap_type === 'careless' && '😅 粗心'}
             </span>
           </div>
           <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
@@ -278,6 +279,7 @@ export default function ReviewPage() {
                   {currentGap.gap_type === 'vocab' && '📚 不认识的单词：'}
                   {currentGap.gap_type === 'grammar' && '📖 不理解的语法点：'}
                   {currentGap.gap_type === 'logic' && '🧠 不理解的句子：'}
+                  {currentGap.gap_type === 'careless' && '😅 粗心原因：'}
                   {!currentGap.gap_type && '❓ 问题记录：'}
                 </span>
               </div>
