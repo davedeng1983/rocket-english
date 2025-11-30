@@ -300,6 +300,28 @@ function extractQuestions(text: string): { questions: ParsedQuestion[], parsingL
        }
     } else if (title.includes('阅读理解') || (title.includes('阅读') && !title.includes('表达'))) {
        sectionQuestions = parseReading(content, orderIndex)
+       // 阅读理解兜底：如果标准解析少于预期，尝试扫描无选项的题目 (可能是一些非标题目)
+       if (targetCount > 0 && sectionQuestions.length < targetCount) {
+            parsingLog.push(`  - Reading standard parse low (${sectionQuestions.length}/${targetCount}). Trying fallback scan...`)
+            const looseResults = parseNoOptionBlock(content, orderIndex, 'reading', false)
+            
+            // 合并逻辑：只添加标准解析没找到的题目 (根据题号)
+            const existingNumbers = new Set(sectionQuestions.map(q => q.orderIndex))
+            for (const q of looseResults) {
+                if (!existingNumbers.has(q.orderIndex)) {
+                    // 确保题号合理 (在当前模块范围内)
+                    // 假设 sectionQuestions 已经找到了一些，我们只填补空缺
+                    // 或者如果 sectionQuestions 为空，我们全盘接受
+                    if (q.orderIndex > orderIndex) {
+                         sectionQuestions.push(q)
+                         existingNumbers.add(q.orderIndex)
+                    }
+                }
+            }
+            // 按题号排序
+            sectionQuestions.sort((a, b) => a.orderIndex - b.orderIndex)
+            parsingLog.push(`  - After fallback scan: ${sectionQuestions.length} questions.`)
+       }
     } else if (title.includes('阅读表达') || title.includes('任务型阅读')) {
        // 默认尝试严格模式
        sectionQuestions = parseNoOptionBlock(content, orderIndex, 'reading', true)
@@ -484,6 +506,22 @@ function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuesti
         // 智能校验
         let isQuestion = false;
 
+        // 全局去重校验：防止解析到答案区的重复题号
+        // 如果解析出的题号 <= 当前最大题号，且不是在 strictMode 下的第一次尝试，则认为是回退/重复
+        // 注意：在 strictMode 下，我们通常信任标记。但是答案区的标记会导致重复。
+        // 答案区的特征：数字后面紧跟内容，且可能包含【答案】等标签
+        // 我们的 parseNoOptionBlock 是按顺序扫描的。如果 Q37 已经处理过，再遇到 37，大概率是答案。
+        if (!isNaN(number) && number <= currentOrder) {
+             // 特殊情况：如果 currentOrder 是 startIndex (初始值)，且 number 也是 startIndex，说明是第一题，允许
+             // 但通常 number 会 > startIndex (因为 startIndex 是上一题的结尾)
+             // 如果 startIndex = 0，number = 1，则 1 > 0，通过。
+             // 如果上一题是 36，currentOrder = 36。
+             // 新题是 37。 37 > 36，通过。
+             // 答案是 37。 37 <= 37，拦截。
+             // 所以这个逻辑是稳健的。
+             continue; 
+        }
+
         if (strictMode) {
             // 支持小数分值
             const hasScore = block.match(/[（(]\s*\d+(?:\.\d+)?\s*分\s*[）)]/)
@@ -499,7 +537,7 @@ function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuesti
             // 允许适度的断号 (1-5)
             // 关键修改：防止题号倒退 (过滤 "题目1")
             else if (!isNaN(number)) {
-                if (number <= currentOrder) continue; // 过滤倒退题号
+                // if (number <= currentOrder) continue; // 全局已校验
                 if (number > currentOrder + 5) continue; // 过滤跳跃过大
                 isQuestion = true;
             }
