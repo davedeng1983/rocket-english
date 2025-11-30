@@ -227,8 +227,9 @@ function extractQuestions(text: string): ParsedQuestion[] {
   let orderIndex = 0
 
   // 1. 按大题切分模块
-  // 匹配 "一、" "二、" "三、" "四、" "五、" ...
-  const sectionRegex = /(?:^|\n)\s*([一二三四五六七八九十]+)、\s*([^\n]+)/g
+  // 改进：兼容多种标题格式
+  // 匹配 "一、" "二、" 或 "Part I" "Part II" 或 "第一部分"
+  const sectionRegex = /(?:^|\n)\s*(?:([一二三四五六七八九十]+)、|(Part\s+[IVX]+)|(第[一二三四五六七八九十]+部分))\s*([^\n]*)/g
   const sections: { title: string; content: string }[] = []
   
   let lastIndex = 0
@@ -236,22 +237,29 @@ function extractQuestions(text: string): ParsedQuestion[] {
   
   while ((match = sectionRegex.exec(text)) !== null) {
     if (sections.length > 0) {
-      // 结束上一个 section
       sections[sections.length - 1].content = text.substring(lastIndex, match.index)
     }
-    // 开启新 section
+    // 组合标题
+    const titlePart = match[1] || match[2] || match[3]
+    const contentPart = match[4] || ''
     sections.push({
-      title: match[1] + '、' + match[2],
-      content: '' // 暂时为空，等待下一个匹配来截断
+      title: titlePart + ' ' + contentPart,
+      content: '' 
     })
     lastIndex = match.index + match[0].length
   }
+  
   // 补上最后一个 section 的内容
   if (sections.length > 0) {
     sections[sections.length - 1].content = text.substring(lastIndex)
-  } else {
-    // 如果没有找到大题号，就把全文当做一个 Section 处理（降级兼容）
-    sections.push({ title: '默认部分', content: text })
+  }
+
+  // 如果分模块失败（只找到了一个模块或者没找到），回退到全文扫描模式
+  // 这里的逻辑是：如果只有一个模块，可能是因为没有大题号，我们尝试把全文当做混合题型来解析
+  // 但为了稳妥，如果只有一个模块且标题不是标准的，我们最好不要强行用 parseSingleChoice 扫描全部，
+  // 而是尝试在全文里依次找 Cloze 和 Reading 的特征
+  if (sections.length === 0) {
+      sections.push({ title: '默认部分', content: text })
   }
 
   // 2. 遍历每个模块，根据标题决定解析策略
@@ -259,22 +267,33 @@ function extractQuestions(text: string): ParsedQuestion[] {
     const { title, content } = section
     
     // 策略分发
-    if (title.includes('单项') || title.includes('选择')) {
-       // A. 单项选择策略
+    if (title.includes('单项') || title.includes('选择') || title.includes('Grammar')) {
        questions.push(...parseSingleChoice(content, orderIndex))
-    } else if (title.includes('完形') || title.includes('完型')) {
-       // B. 完形填空策略
+    } else if (title.includes('完形') || title.includes('完型') || title.includes('Cloze')) {
        questions.push(...parseCloze(content, orderIndex))
-    } else if (title.includes('阅读')) {
-       // C. 阅读理解策略
+    } else if (title.includes('阅读') || title.includes('Reading')) {
        questions.push(...parseReading(content, orderIndex))
     } else {
-       // D. 默认策略（尝试按单选解析）
-       questions.push(...parseSingleChoice(content, orderIndex))
+       // D. 默认策略：如果标题不明，我们尝试用所有的解析器跑一遍，取结果最多的那个？
+       // 或者简单点，如果看起来像单选就按单选，看起来像完形就按完形
+       
+       // 增强版兜底：尝试提取单选题
+       const singleChoices = parseSingleChoice(content, orderIndex)
+       if (singleChoices.length > 0) {
+           questions.push(...singleChoices)
+       } else {
+           // 如果没提取到单选，试试是不是完形（有文章+题目）
+           const clozes = parseCloze(content, orderIndex)
+           if (clozes.length > 0) {
+               questions.push(...clozes)
+           }
+       }
     }
     
     // 更新 orderIndex，避免题号冲突
-    orderIndex += questions.length
+    if (questions.length > 0) {
+        orderIndex = questions[questions.length - 1].orderIndex
+    }
   }
 
   return questions
@@ -293,7 +312,10 @@ function parseSingleChoice(text: string, startIndex: number): ParsedQuestion[] {
         const q = parseQuestionBlock(block)
         if (q) {
             q.sectionType = 'single_choice'
-            q.orderIndex = ++currentOrder
+            // 只有当题号真的在增加时才更新 currentOrder，或者直接用提取到的题号
+            // 这里简单处理：如果能提取到题号，优先用提取的，否则累加
+            const extractedNum = parseInt(q.number)
+            q.orderIndex = isNaN(extractedNum) ? ++currentOrder : extractedNum
             questions.push(q)
         }
     } catch (e) {}
@@ -326,7 +348,8 @@ function parseCloze(text: string, startIndex: number): ParsedQuestion[] {
       const q = parseQuestionBlock(block)
       if (q) {
           q.sectionType = 'cloze'
-          q.orderIndex = ++currentOrder
+          const extractedNum = parseInt(q.number)
+          q.orderIndex = isNaN(extractedNum) ? ++currentOrder : extractedNum
           q.article = article // 关联文章
           questions.push(q)
       }
