@@ -398,6 +398,17 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
 
       setScore(Math.round((correctCount! / totalQuestions!) * 100))
       setExamCompleted(true)
+      
+      // 调试日志
+      console.log('[ExamRunner] 提交成功，准备显示结果页面', {
+        score: Math.round((correctCount! / totalQuestions!) * 100),
+        correctCount,
+        totalQuestions,
+        wrongQuestionsCount: wrongQuestions.length,
+        userAnswersCount: Object.keys(userAnswers).length,
+        questionsCount: questions.length
+      })
+      
       setViewState('result')
       
       // 刷新完成的部分列表
@@ -601,6 +612,18 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
     const unansweredCount = questions.filter(
       (q) => !userAnswers[q.id]
     ).length
+
+    // 调试日志
+    console.log('[ExamRunner] 渲染结果页面', {
+      viewState,
+      score,
+      correctCount,
+      wrongCount,
+      unansweredCount,
+      questionsLength: questions.length,
+      showResultDetail,
+      showAttribution
+    })
 
     return (
       <div className="min-h-screen bg-gradient-to-b from-white to-slate-50 px-4 py-8">
