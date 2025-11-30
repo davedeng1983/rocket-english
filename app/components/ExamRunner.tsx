@@ -613,17 +613,19 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
       (q) => !userAnswers[q.id]
     ).length
 
-    // 调试日志
-    console.log('[ExamRunner] 渲染结果页面', {
-      viewState,
-      score,
-      correctCount,
-      wrongCount,
-      unansweredCount,
-      questionsLength: questions.length,
-      showResultDetail,
-      showAttribution
-    })
+    // 调试日志 - 增强版
+    console.log('🔵 ========== 渲染结果页面 ==========')
+    console.log('🔵 viewState:', viewState)
+    console.log('🔵 score:', score)
+    console.log('🔵 correctCount:', correctCount)
+    console.log('🔵 wrongCount:', wrongCount)
+    console.log('🔵 unansweredCount:', unansweredCount)
+    console.log('🔵 questions.length:', questions.length)
+    console.log('🔵 showResultDetail:', showResultDetail)
+    console.log('🔵 showAttribution:', showAttribution)
+    console.log('🔵 paper:', paper ? '存在' : '不存在')
+    console.log('🔵 userAnswers keys:', Object.keys(userAnswers).length)
+    console.log('🔵 ==================================')
 
     return (
       <div className="min-h-screen bg-gradient-to-b from-white to-slate-50 px-4 py-8">
