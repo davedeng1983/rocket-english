@@ -243,7 +243,6 @@ function extractQuestions(text: string): ParsedQuestion[] {
     const fullTitle = titlePart + ' ' + contentPart
     
     // 从标题中提取目标题目数量
-    // 匹配 "共 12 题" "共12小题" "共12题" "共 12 分" (分不准，先看题)
     let targetCount = 0
     const countMatch = fullTitle.match(/共\s*(\d+)\s*(?:小)?题/)
     if (countMatch) {
@@ -276,30 +275,45 @@ function extractQuestions(text: string): ParsedQuestion[] {
   // 2. 遍历每个模块
   for (const section of sections) {
     const { title, content, targetCount } = section
-    
+    let sectionQuestions: ParsedQuestion[] = []
+
     // 策略分发
     if (title.includes('单项') || title.includes('选择') || title.includes('Grammar')) {
-       questions.push(...parseStandardBlock(content, orderIndex, 'single_choice'))
+       sectionQuestions = parseStandardBlock(content, orderIndex, 'single_choice')
     } else if (title.includes('完形') || title.includes('完型') || title.includes('Cloze')) {
-       questions.push(...parseStandardBlock(content, orderIndex, 'cloze', true))
+       sectionQuestions = parseStandardBlock(content, orderIndex, 'cloze', true)
     } else if (title.includes('阅读理解') || (title.includes('阅读') && !title.includes('表达'))) {
-       questions.push(...parseReading(content, orderIndex))
+       sectionQuestions = parseReading(content, orderIndex)
     } else if (title.includes('阅读表达') || title.includes('任务型阅读')) {
-       // 新增：阅读表达（无选项）
-       questions.push(...parseNoOptionBlock(content, orderIndex, 'reading'))
+       // 新增：阅读表达（无选项）- 初始尝试宽松模式
+       sectionQuestions = parseNoOptionBlock(content, orderIndex, 'reading', false)
     } else if (title.includes('文段表达') || title.includes('书面表达') || title.includes('写作')) {
        // 新增：写作（无选项）
-       questions.push(...parseNoOptionBlock(content, orderIndex, 'writing'))
+       sectionQuestions = parseNoOptionBlock(content, orderIndex, 'writing', false)
     } else {
-       // 默认尝试标准带选项解析
+       // 默认策略
        const results = parseStandardBlock(content, orderIndex, 'single_choice')
        if (results.length === 0) {
-           // 如果没解析出带选项的题，试试无选项的
-           questions.push(...parseNoOptionBlock(content, orderIndex, 'reading'))
+           // 默认策略里如果不带选项，必须启用严格模式，防止把全文都当题目
+           sectionQuestions = parseNoOptionBlock(content, orderIndex, 'reading', true)
        } else {
-           questions.push(...results)
+           sectionQuestions = results
        }
     }
+
+    // 熔断机制：如果解析出的题目远超预期 (且预期不为0)，启用严格模式重试
+    // 阈值：比如预期 5 题，解析出 10 题以上就算异常
+    if (targetCount > 0 && sectionQuestions.length > targetCount + 5) {
+        console.warn(`Warning: Extracted ${sectionQuestions.length} questions for section "${title}" but expected ${targetCount}. Retrying with strict mode.`)
+        if (title.includes('阅读表达') || title.includes('任务型阅读') || title.includes('文段表达') || title.includes('写作')) {
+             sectionQuestions = parseNoOptionBlock(content, orderIndex, title.includes('写作') ? 'writing' : 'reading', true)
+        }
+    }
+
+    // 再次熔断：如果还是太多，可能切分有问题，强行只取前 N 个 (如果 N 比较合理)
+    // 这里暂时不做强行截断，而是过滤掉题号跳跃过大的
+    
+    questions.push(...sectionQuestions)
     
     // 更新 orderIndex
     if (questions.length > 0) {
@@ -355,7 +369,8 @@ function parseReading(text: string, startIndex: number): ParsedQuestion[] {
 }
 
 // === 无选项题目解析 (阅读表达、作文) ===
-function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuestion['sectionType']): ParsedQuestion[] {
+// strictMode: 如果为 true，则必须包含 "分" 或 "答案/解析" 等关键词才算题目
+function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuestion['sectionType'], strictMode: boolean): ParsedQuestion[] {
     const questions: ParsedQuestion[] = []
     let currentOrder = startIndex
     
@@ -402,6 +417,14 @@ function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuesti
         
         const number = headerMatch[1]
         let content = block.substring(headerMatch[0].length).trim()
+
+        // 严格模式检查
+        if (strictMode) {
+            const hasScore = block.match(/[（(]\s*\d+\s*分\s*[）)]/)
+            const hasAnswerKey = block.includes('【答案】') || block.includes('【解析】')
+            // 如果既没有分值标记，也没有答案解析标记，就跳过
+            if (!hasScore && !hasAnswerKey) continue;
+        }
         
         // 提取答案解析（如果有）
         let correctAnswer, analysis
@@ -410,7 +433,22 @@ function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuesti
             correctAnswer = answerMatch[1].trim()
             content = content.replace(answerMatch[0], '')
         }
-        // ... 解析提取同上 ...
+        
+        const analysisMatch = content.match(/【解析】([\s\S]*?)(?=【|$)/)
+        if (analysisMatch) {
+            analysis = analysisMatch[1].trim()
+            content = content.replace(analysisMatch[0], '')
+        }
+        
+        const knowledgeMatch = content.match(/【知识点】([\s\S]*?)(?=【|$)/)
+        if (knowledgeMatch) {
+            content = content.replace(knowledgeMatch[0], '')
+        }
+        
+        content = content.replace(/【[^】]+】[\s\S]*?(?=【|$)/g, '').trim()
+
+        // 额外过滤：如果内容太短且全是数字或无意义字符，跳过
+        if (content.length < 2) continue;
 
         questions.push({
             number,
