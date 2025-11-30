@@ -19,6 +19,7 @@ export async function POST(request: Request) {
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File
+    const enableImages = formData.get('enableImages') !== 'false' // Default to true
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
@@ -37,20 +38,21 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(arrayBuffer)
 
     // 使用 mammoth 解析 Word 文档
-    // 修改：使用 convertToHtml 以便获取图片
-    // 使用 mammoth 解析 Word 文档
     // 恢复图片提取以支持侧边栏查看图片
+    // 根据 enableImages 参数决定是否转换图片
+    const convertImageOptions = enableImages ? {
+        convertImage: (mammoth.images as any).inline((element: any) => {
+            return element.read("base64").then((imageBuffer: any) => {
+                return {
+                    src: `data:${element.contentType};base64,${imageBuffer}`,
+                }
+            })
+        }),
+    } : {}
+
     const result = await mammoth.convertToHtml(
         { buffer },
-        {
-            convertImage: (mammoth.images as any).inline((element: any) => {
-                return element.read("base64").then((imageBuffer: any) => {
-                    return {
-                        src: `data:${element.contentType};base64,${imageBuffer}`,
-                    }
-                })
-            }),
-        }
+        convertImageOptions
     )
     const html = result.value
     const text = convertHtmlToTextWithImages(html)
@@ -65,6 +67,8 @@ export async function POST(request: Request) {
 
     // 调试模式：即使成功也附带文本样本和解析日志
     // 注意：为了防止 Response Body 过大导致 Vercel 500 错误，需隐藏 Base64 图片数据
+    // 关键：我们需要 rawSections 里的图片用于前端展示，所以不能简单的 replace 掉
+    // 但是 debugSafeText 是为了 return debug_text 用的，这个可以隐藏
     const debugSafeText = text.replace(/!\[image\]\(data:[^)]+\)/g, '![image](...base64 data hidden...)')
     
     const splitPoint = Math.floor(debugSafeText.length * 0.4)
@@ -83,6 +87,9 @@ export async function POST(request: Request) {
     }
 
     // 1. 创建试卷记录
+    // 优化：如果 sections 内容太大（含图片），可能会导致 insert 失败或者请求超时
+    // 策略：如果包含大量图片数据，可能需要裁剪或提示用户
+    // 这里先尝试完整保存，但如果出错，前端需要处理
     const { data: examPaper, error: paperError } = await supabase
       .from('exam_papers')
       .insert({

@@ -8,7 +8,8 @@ export default function ImportPage() {
   const router = useRouter()
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [result, setResult] = useState<{
+  const [enableImages, setEnableImages] = useState(true) // New state for image toggle
+  const [uploadProgress, setUploadProgress] = useState(0)
     success: boolean
     message: string
     data?: any
@@ -53,6 +54,7 @@ export default function ImportPage() {
     try {
       const formData = new FormData()
       formData.append('file', file)
+      formData.append('enableImages', String(enableImages))
 
       // Use XMLHttpRequest for real progress tracking
       const xhr = new XMLHttpRequest()
@@ -157,6 +159,24 @@ export default function ImportPage() {
                 已选择：{file.name} ({(file.size / 1024).toFixed(2)} KB)
               </p>
             )}
+          </div>
+
+          {/* 图片提取选项 */}
+          <div className="mb-6">
+            <label className="flex items-center space-x-2 cursor-pointer">
+                <input 
+                    type="checkbox" 
+                    checked={enableImages}
+                    onChange={(e) => setEnableImages(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-slate-700">
+                    提取文档图片 
+                    <span className="ml-1 text-xs text-slate-500 font-normal">
+                        (耗时较长，如遇超时或只需文字请取消勾选)
+                    </span>
+                </span>
+            </label>
           </div>
 
           {/* 上传按钮 */}
