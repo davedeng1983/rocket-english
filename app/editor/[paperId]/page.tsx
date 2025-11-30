@@ -162,11 +162,33 @@ export default function EditorPage({ params }: { params: Promise<{ paperId: stri
                     <div className="mb-4 rounded bg-blue-50 p-3 text-xs text-blue-700">
                         💡 提示：在此处找到丢失的原文或题目，复制并粘贴到左侧编辑器中。
                     </div>
+import ReactMarkdown from 'react-markdown'
+
+// ... existing imports ...
+
+// ... in EditorPage component ...
+
                     {paper?.structure_map?.sections ? (
                         (paper.structure_map.sections as any[]).map((section, idx) => (
-                            <div key={idx} className="mb-6">
+                            <div key={idx} className="mb-6 border-b border-slate-100 pb-4">
                                 <h3 className="mb-2 font-bold text-slate-900 bg-slate-100 p-1 rounded">{section.title}</h3>
-                                <pre className="whitespace-pre-wrap font-mono text-xs">{section.content}</pre>
+                                <div className="markdown-content text-xs">
+                                    <ReactMarkdown
+                                        urlTransform={(url) => url}
+                                        components={{
+                                            img: ({ node, ...props }) => (
+                                                <img 
+                                                    {...props} 
+                                                    className="my-2 max-h-[200px] max-w-full rounded border border-slate-200 object-contain cursor-move"
+                                                    title="您可以直接拖拽此图片到左侧编辑器"
+                                                />
+                                            ),
+                                            p: ({ node, ...props }) => <p className="mb-2 whitespace-pre-wrap" {...props} />
+                                        }}
+                                    >
+                                        {section.content}
+                                    </ReactMarkdown>
+                                </div>
                             </div>
                         ))
                     ) : (

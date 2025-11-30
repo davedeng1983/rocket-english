@@ -39,13 +39,17 @@ export async function POST(request: Request) {
     // 使用 mammoth 解析 Word 文档
     // 修改：使用 convertToHtml 以便获取图片
     // 使用 mammoth 解析 Word 文档
-    // ⚡️ 性能优化：为了防止 Vercel Hobby Plan (10s限制) 超时，暂时禁用自动图片提取
-    // 用户可以在导入后使用“试卷编辑器”手动补图
+    // 恢复图片提取以支持侧边栏查看图片
     const result = await mammoth.convertToHtml(
         { buffer },
         {
-            // 暂时禁用图片转换以提高速度
-            // convertImage: ... 
+            convertImage: (mammoth.images as any).inline((element: any) => {
+                return element.read("base64").then((imageBuffer: any) => {
+                    return {
+                        src: `data:${element.contentType};base64,${imageBuffer}`,
+                    }
+                })
+            }),
         }
     )
     const html = result.value
