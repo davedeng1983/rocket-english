@@ -1164,15 +1164,8 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
         )}
       </div>
 
-      {/* 错题归因弹窗 (Running 状态下显示) */}
-      {showAttribution && currentWrongQuestion && (() => {
-        const wrongQuestions = questions.filter(
-          (q) => userAnswers[q.id] !== q.correct_answer
-        )
-        const currentWrongIndex = wrongQuestions.findIndex(
-          (q) => q.id === currentWrongQuestion.id
-        )
-        
+      {/* 错题归因弹窗 (Running 状态下显示 - 实时归因模式) */}
+      {showAttribution && currentWrongQuestion && viewState === 'running' && (() => {
         // 格式化正确答案显示：如果是选项字母，显示完整选项内容
         let formattedCorrectAnswer = currentWrongQuestion.correct_answer || ''
         if (currentWrongQuestion.options && Array.isArray(currentWrongQuestion.options) && formattedCorrectAnswer) {
@@ -1189,8 +1182,9 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
             userAnswer={userAnswers[currentWrongQuestion.id] || ''}
             correctAnswer={formattedCorrectAnswer}
             attemptId={(window as any).__currentAttemptId || ''}
-            currentIndex={currentWrongIndex + 1}
-            totalCount={wrongQuestions.length}
+            // 实时归因模式下不显示进度（因为是一题一题来的）
+            currentIndex={undefined}
+            totalCount={undefined}
             onComplete={handleAttributionComplete}
             onSkip={() => {
               setShowAttribution(false)
