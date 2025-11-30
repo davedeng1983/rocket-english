@@ -29,13 +29,22 @@ export async function DELETE(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { error } = await supabase
+  // 关键修改：添加 count: 'exact' 并在删除数为 0 时报错
+  const { error, count } = await supabase
     .from('exam_papers')
-    .delete()
+    .delete({ count: 'exact' })
     .eq('id', resolvedParams.id)
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // 如果 RLS 阻止了删除，或者 ID 不存在，count 会是 0
+  if (count === 0) {
+    return NextResponse.json(
+      { error: '删除失败：找不到试卷或没有权限。请检查 Supabase RLS 策略。' }, 
+      { status: 403 }
+    )
   }
 
   return NextResponse.json({ success: true })

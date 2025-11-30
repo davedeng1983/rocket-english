@@ -55,14 +55,17 @@ export default function StudyPage() {
       const res = await fetch(`/api/exam-papers/${id}`, {
         method: 'DELETE',
       })
+      
       if (res.ok) {
         setPapers(papers.filter(p => p.id !== id))
       } else {
-        alert('删除失败')
+        // 尝试获取后端返回的具体错误信息
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || '删除失败，请稍后重试')
       }
     } catch (err) {
       console.error(err)
-      alert('删除出错')
+      alert('删除出错，请检查网络连接')
     }
   }
 
