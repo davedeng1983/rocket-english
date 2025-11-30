@@ -401,9 +401,16 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
   }
 
   // === 视图 2: 考试进行中 (原 Question View) ===
+  const isSplitView = currentQuestion && 
+    (currentQuestion.section_type === 'cloze' || currentQuestion.section_type === 'reading') && 
+    currentQuestion.meta && 
+    typeof currentQuestion.meta === 'object' && 
+    'article' in currentQuestion.meta && 
+    (currentQuestion.meta as any).article;
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-slate-50">
-      <div className="container mx-auto max-w-3xl px-4 py-8">
+      <div className={`container mx-auto px-4 py-8 ${isSplitView ? 'max-w-6xl' : 'max-w-3xl'}`}>
         {/* 顶部栏：返回概览 + 进度 */}
         <div className="mb-6">
           <button 
@@ -433,133 +440,167 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
           </div>
         </div>
 
-        {/* 题目卡片 */}
         {currentQuestion && (
-          <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-lg">
-            <div className="mb-4 flex items-center justify-between">
-              <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700">
-                {currentQuestion.section_type === 'single_choice'
-                  ? '单选题'
-                  : currentQuestion.section_type === 'cloze'
-                  ? '完形填空'
-                  : currentQuestion.section_type === 'writing'
-                  ? '书面表达'
-                  : (currentQuestion.options ? '阅读理解' : '阅读表达')}
-              </span>
-              {/* 显示题号 */}
-              <span className="text-sm font-bold text-slate-300">#{currentIndex + 1}</span>
-            </div>
+          <div className={`grid gap-6 ${isSplitView ? 'lg:grid-cols-2 lg:items-start' : 'grid-cols-1'}`}>
             
-            {/* 如果有前置文章（如阅读理解/完形），显示文章 */}
-            {currentQuestion.meta && 
-             typeof currentQuestion.meta === 'object' && 
-             'article' in currentQuestion.meta && 
-             (currentQuestion.meta as any).article && (
-                 <div className="mb-6 rounded-lg bg-slate-50 p-4 text-sm leading-relaxed text-slate-700 markdown-content">
-                     <h4 className="mb-2 font-bold text-slate-500">阅读材料</h4>
-                     <ReactMarkdown
-                        urlTransform={(url) => url}
-                        components={{
-                          img: ({ node, ...props }) => (
-                            <img 
-                              {...props} 
-                              className="my-4 max-h-[400px] max-w-full rounded-lg border border-slate-200 object-contain shadow-sm"
-                              onError={(e) => console.error('Image load error:', typeof props.src === 'string' ? props.src.substring(0, 50) + '...' : 'Blob image')}
-                            />
-                          ),
-                          p: ({ node, ...props }) => <p className="mb-4" {...props} />
-                        }}
-                     >
-                        {(currentQuestion.meta as any).article}
-                     </ReactMarkdown>
-                 </div>
-            )}
-
-            {/* 题目内容 */}
-            <div className="mb-6 text-lg leading-relaxed text-slate-900 markdown-content">
-               <ReactMarkdown
-                  urlTransform={(url) => url}
-                  components={{
-                    img: ({ node, ...props }) => (
-                      <img 
-                        {...props} 
-                        className="my-4 max-h-[400px] max-w-full rounded-lg border border-slate-200 object-contain shadow-sm"
-                        onError={(e) => console.error('Image load error:', typeof props.src === 'string' ? props.src.substring(0, 50) + '...' : 'Blob image')}
-                      />
-                    ),
-                    p: ({ node, ...props }) => <p className="mb-4" {...props} />
-                  }}
-               >
-                  {currentQuestion.content}
-               </ReactMarkdown>
-            </div>
-
-            {/* 选项 */}
-            {currentQuestion.options && Array.isArray(currentQuestion.options) ? (
-              <div className="space-y-3">
-                {(currentQuestion.options as string[]).map((option: string, index: number) => {
-                  const optionLabel = String.fromCharCode(65 + index) // A, B, C, D
-                  const isSelected = userAnswers[currentQuestion.id] === optionLabel
-
-                  return (
-                    <button
-                      key={index}
-                      onClick={() => handleSelectAnswer(optionLabel)}
-                      className={`w-full rounded-lg border-2 p-4 text-left transition ${
-                        isSelected
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-slate-200 bg-white hover:border-slate-300'
-                      }`}
-                    >
-                      <span className="font-medium text-slate-700">
-                        {optionLabel}. {option}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            ) : (
-                // 无选项题目（主观题）的输入框
-                <div className="mt-4">
-                    <textarea
-                        value={userAnswers[currentQuestion.id] || ''}
-                        onChange={(e) => handleSelectAnswer(e.target.value)}
-                        placeholder="请输入你的答案..."
-                        className="w-full rounded-lg border border-slate-300 p-4 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                        rows={5}
-                    />
+            {/* 左侧文章区域 (仅在 Split View 且是大屏时显示) */}
+            {isSplitView && (
+                <div className="hidden lg:block sticky top-4 max-h-[85vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-md">
+                    <div className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
+                        <BookOpen className="text-blue-500" size={20} />
+                        <h3 className="font-bold text-slate-700">阅读材料</h3>
+                    </div>
+                    <div className="text-base leading-relaxed text-slate-700 markdown-content">
+                        <ReactMarkdown
+                            urlTransform={(url) => url}
+                            components={{
+                                img: ({ node, ...props }) => (
+                                    <img 
+                                        {...props} 
+                                        className="my-4 max-h-[400px] max-w-full rounded-lg border border-slate-200 object-contain shadow-sm"
+                                        onError={(e) => console.error('Image load error:', typeof props.src === 'string' ? props.src.substring(0, 50) + '...' : 'Blob image')}
+                                    />
+                                ),
+                                p: ({ node, ...props }) => <p className="mb-4" {...props} />
+                            }}
+                        >
+                            {(currentQuestion.meta as any).article}
+                        </ReactMarkdown>
+                    </div>
                 </div>
             )}
+
+            {/* 右侧题目区域 (或主要区域) */}
+            <div className="flex flex-col gap-6">
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg">
+                    <div className="mb-4 flex items-center justify-between">
+                    <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700">
+                        {currentQuestion.section_type === 'single_choice'
+                        ? '单选题'
+                        : currentQuestion.section_type === 'cloze'
+                        ? '完形填空'
+                        : currentQuestion.section_type === 'writing'
+                        ? '书面表达'
+                        : (currentQuestion.options ? '阅读理解' : '阅读表达')}
+                    </span>
+                    {/* 显示题号 */}
+                    <span className="text-sm font-bold text-slate-300">#{currentIndex + 1}</span>
+                    </div>
+                    
+                    {/* 移动端文章显示 (或者非 Split View 时显示) */}
+                    {/* 如果是 Split View，但在移动端 (lg:hidden)，则显示文章 */}
+                    {/* 如果不是 Split View，且有文章，则始终显示 */}
+                    {currentQuestion.meta && 
+                    typeof currentQuestion.meta === 'object' && 
+                    'article' in currentQuestion.meta && 
+                    (currentQuestion.meta as any).article && (
+                        <div className={`mb-6 rounded-lg bg-slate-50 p-4 text-sm leading-relaxed text-slate-700 markdown-content ${isSplitView ? 'lg:hidden' : ''}`}>
+                            <h4 className="mb-2 font-bold text-slate-500">阅读材料</h4>
+                            <ReactMarkdown
+                                urlTransform={(url) => url}
+                                components={{
+                                img: ({ node, ...props }) => (
+                                    <img 
+                                    {...props} 
+                                    className="my-4 max-h-[400px] max-w-full rounded-lg border border-slate-200 object-contain shadow-sm"
+                                    onError={(e) => console.error('Image load error:', typeof props.src === 'string' ? props.src.substring(0, 50) + '...' : 'Blob image')}
+                                    />
+                                ),
+                                p: ({ node, ...props }) => <p className="mb-4" {...props} />
+                                }}
+                            >
+                                {(currentQuestion.meta as any).article}
+                            </ReactMarkdown>
+                        </div>
+                    )}
+
+                    {/* 题目内容 */}
+                    <div className="mb-6 text-lg leading-relaxed text-slate-900 markdown-content">
+                    <ReactMarkdown
+                        urlTransform={(url) => url}
+                        components={{
+                            img: ({ node, ...props }) => (
+                            <img 
+                                {...props} 
+                                className="my-4 max-h-[400px] max-w-full rounded-lg border border-slate-200 object-contain shadow-sm"
+                                onError={(e) => console.error('Image load error:', typeof props.src === 'string' ? props.src.substring(0, 50) + '...' : 'Blob image')}
+                            />
+                            ),
+                            p: ({ node, ...props }) => <p className="mb-4" {...props} />
+                        }}
+                    >
+                        {currentQuestion.content}
+                    </ReactMarkdown>
+                    </div>
+
+                    {/* 选项 */}
+                    {currentQuestion.options && Array.isArray(currentQuestion.options) ? (
+                    <div className="space-y-3">
+                        {(currentQuestion.options as string[]).map((option: string, index: number) => {
+                        const optionLabel = String.fromCharCode(65 + index) // A, B, C, D
+                        const isSelected = userAnswers[currentQuestion.id] === optionLabel
+
+                        return (
+                            <button
+                            key={index}
+                            onClick={() => handleSelectAnswer(optionLabel)}
+                            className={`w-full rounded-lg border-2 p-4 text-left transition ${
+                                isSelected
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-slate-200 bg-white hover:border-slate-300'
+                            }`}
+                            >
+                            <span className="font-medium text-slate-700">
+                                {optionLabel}. {option}
+                            </span>
+                            </button>
+                        )
+                        })}
+                    </div>
+                    ) : (
+                        // 无选项题目（主观题）的输入框
+                        <div className="mt-4">
+                            <textarea
+                                value={userAnswers[currentQuestion.id] || ''}
+                                onChange={(e) => handleSelectAnswer(e.target.value)}
+                                placeholder="请输入你的答案..."
+                                className="w-full rounded-lg border border-slate-300 p-4 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                rows={5}
+                            />
+                        </div>
+                    )}
+                </div>
+
+                {/* 导航按钮 */}
+                <div className="flex justify-between">
+                    <button
+                        onClick={handlePrevious}
+                        disabled={currentIndex === 0}
+                        className="rounded-lg border border-slate-300 bg-white px-6 py-2 font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        上一题
+                    </button>
+
+                    {currentIndex === questions.length - 1 ? (
+                        <button
+                        onClick={handleSubmit}
+                        disabled={isSubmitting}
+                        className="rounded-lg bg-green-600 px-6 py-2 font-medium text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                        {isSubmitting ? '提交中...' : '提交试卷'}
+                        </button>
+                    ) : (
+                        <button
+                        onClick={handleNext}
+                        className="rounded-lg bg-blue-600 px-6 py-2 font-medium text-white transition hover:bg-blue-700"
+                        >
+                        下一题
+                        </button>
+                    )}
+                </div>
+            </div>
           </div>
         )}
-
-        {/* 导航按钮 */}
-        <div className="flex justify-between">
-          <button
-            onClick={handlePrevious}
-            disabled={currentIndex === 0}
-            className="rounded-lg border border-slate-300 bg-white px-6 py-2 font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            上一题
-          </button>
-
-          {currentIndex === questions.length - 1 ? (
-            <button
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="rounded-lg bg-green-600 px-6 py-2 font-medium text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isSubmitting ? '提交中...' : '提交试卷'}
-            </button>
-          ) : (
-            <button
-              onClick={handleNext}
-              className="rounded-lg bg-blue-600 px-6 py-2 font-medium text-white transition hover:bg-blue-700"
-            >
-              下一题
-            </button>
-          )}
-        </div>
       </div>
 
       {/* 错题归因弹窗 (Running 状态下显示) */}
