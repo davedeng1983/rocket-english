@@ -32,6 +32,20 @@ interface SectionGroup {
   startIndex: number
 }
 
+// 稳定的 ReactMarkdown 组件配置（移到组件外部以避免每次渲染创建新对象）
+const markdownComponents = {
+  img: ({ node, ...props }: any) => (
+    <img 
+      {...props} 
+      className="my-4 max-h-[400px] max-w-full rounded-lg border border-slate-200 object-contain shadow-sm"
+      onError={(e: any) => {
+        e.currentTarget.style.display = 'none';
+      }}
+    />
+  ),
+  p: ({ node, ...props }: any) => <p className="mb-4" {...props} />,
+};
+
 export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
   const router = useRouter()
   const [paper, setPaper] = useState<any>(null)
@@ -428,33 +442,14 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
     'article' in currentQuestion.meta && 
     (currentQuestion.meta as any).article;
 
-  // Highlight current question number in article
-  const processedArticle = useMemo(() => {
-    // 增加类型安全检查：确保 meta 是对象且 article 存在
+  // 获取文章内容 - 简化逻辑，暂时移除高亮功能以避免 React 错误
+  const getArticleContent = () => {
     if (!currentQuestion?.meta || typeof currentQuestion.meta !== 'object') return '';
-    
-    // 使用类型断言访问 article，如果不存在则返回空字符串
     const meta = currentQuestion.meta as { article?: string };
-    const article = meta.article;
-    
-    if (!article || typeof article !== 'string') return '';
-    
-    const currentNum = currentIndex + 1;
-    // Regex to match: (1), （1）, [1], 1., 1．, 1, (1.5分)
-    // Safer regex without lookbehind for broader compatibility (Safari < 16.4)
-    // Matches either start of line or non-digit character before the number
-    const pattern = new RegExp(`(^|[^0-9])(?:\\(\\s*${currentNum}\\s*\\)|（\\s*${currentNum}\\s*）|\\[\\s*${currentNum}\\s*\\]|${currentNum}\\s*[.．、])`, 'g');
-    
-    try {
-      return article.replace(pattern, (match, prefix) => {
-          const target = match.substring(prefix.length);
-          return `${prefix}\`${target}\``;
-      });
-    } catch (e) {
-      console.error('Highlight error:', e);
-      return article;
-    }
-  }, [currentQuestion, currentIndex]);
+    return meta?.article && typeof meta.article === 'string' ? meta.article : '';
+  };
+  
+  const articleContent = getArticleContent();
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-slate-50">
@@ -501,28 +496,9 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
                     <div className="text-base leading-relaxed text-slate-700 markdown-content">
                         <ReactMarkdown
                             urlTransform={(url) => url}
-                            components={{
-                                img: ({ node, ...props }) => (
-                                    <img 
-                                        {...props} 
-                                        className="my-4 max-h-[400px] max-w-full rounded-lg border border-slate-200 object-contain shadow-sm"
-                                        onError={(e) => {
-                                          // 仅隐藏图片，不进行 DOM 插入操作以避免 React 崩溃
-                                          e.currentTarget.style.display = 'none';
-                                          console.error('Image load error:', typeof props.src === 'string' ? props.src.substring(0, 50) + '...' : 'Blob image');
-                                        }}
-                                    />
-                                ),
-                                p: ({ node, ...props }) => <p className="mb-4" {...props} />,
-                                code: ({ node, ...props }) => (
-                                    <span 
-                                        className="inline-block rounded-md border border-yellow-400 bg-yellow-200 px-1.5 py-0.5 font-bold text-yellow-900 shadow-sm" 
-                                        {...props} 
-                                    />
-                                )
-                            }}
+                            components={markdownComponents}
                         >
-                            {processedArticle}
+                            {String(articleContent || '')}
                         </ReactMarkdown>
                     </div>
                 </div>
@@ -558,26 +534,9 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
                             <h4 className="mb-2 font-bold text-slate-500">阅读材料</h4>
                             <ReactMarkdown
                                 urlTransform={(url) => url}
-                                components={{
-                                img: ({ node, ...props }) => (
-                                    <img 
-                                    {...props} 
-                                    className="my-4 max-h-[400px] max-w-full rounded-lg border border-slate-200 object-contain shadow-sm"
-                                    onError={(e) => {
-                                        e.currentTarget.style.display = 'none';
-                                    }}
-                                    />
-                                ),
-                                p: ({ node, ...props }) => <p className="mb-4" {...props} />,
-                                code: ({ node, ...props }) => (
-                                    <span 
-                                        className="inline-block rounded-md border border-yellow-400 bg-yellow-200 px-1.5 py-0.5 font-bold text-yellow-900 shadow-sm" 
-                                        {...props} 
-                                    />
-                                )
-                                }}
+                                components={markdownComponents}
                             >
-                                {String(processedArticle || '')}
+                                {String(articleContent || '')}
                             </ReactMarkdown>
                         </div>
                     )}
@@ -586,20 +545,9 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
                     <div className="mb-6 text-lg leading-relaxed text-slate-900 markdown-content">
                     <ReactMarkdown
                         urlTransform={(url) => url}
-                        components={{
-                            img: ({ node, ...props }) => (
-                            <img 
-                                {...props} 
-                                className="my-4 max-h-[400px] max-w-full rounded-lg border border-slate-200 object-contain shadow-sm"
-                                onError={(e) => {
-                                    e.currentTarget.style.display = 'none';
-                                }}
-                            />
-                            ),
-                            p: ({ node, ...props }) => <p className="mb-4" {...props} />
-                        }}
+                        components={markdownComponents}
                     >
-                        {currentQuestion?.content || '题目内容加载中...'}
+                        {String(currentQuestion?.content || '题目内容加载中...')}
                     </ReactMarkdown>
                     </div>
 
