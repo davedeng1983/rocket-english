@@ -130,10 +130,10 @@ export default function ProfilePage() {
         <div className="container mx-auto max-w-4xl">
             <div className="flex flex-col items-center gap-6 md:flex-row md:gap-8">
                 <div className="flex h-24 w-24 items-center justify-center rounded-full bg-white/20 text-3xl font-bold shadow-xl backdrop-blur-sm">
-                    {user.email?.[0].toUpperCase() || 'U'}
+                    {user.email?.[0]?.toUpperCase() || 'U'}
                 </div>
                 <div className="text-center md:text-left">
-                    <h1 className="text-2xl font-bold">{fullName || user.email?.split('@')[0]}</h1>
+                    <h1 className="text-2xl font-bold">{fullName || user.email?.split('@')?.[0] || 'User'}</h1>
                     <div className="mt-2 flex items-center justify-center gap-4 text-blue-100 md:justify-start">
                         <span className="flex items-center gap-1 text-sm bg-white/10 px-3 py-1 rounded-full">
                             <Mail size={14} /> {user.email}

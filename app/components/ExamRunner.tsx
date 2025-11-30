@@ -415,11 +415,14 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
     
     const currentNum = currentIndex + 1;
     // Regex to match: (1), （1）, [1], 1., 1．, 1, (1.5分)
-    // Also simple number if it's surrounded by non-digits (risky but needed for some formats)
-    // We look for specific markers first
-    const pattern = new RegExp(`(?<!\\d)(?:\\(\\s*${currentNum}\\s*\\)|（\\s*${currentNum}\\s*）|\\[\\s*${currentNum}\\s*\\]|${currentNum}\\s*[.．、])`, 'g');
+    // Safer regex without lookbehind for broader compatibility (Safari < 16.4)
+    // Matches either start of line or non-digit character before the number
+    const pattern = new RegExp(`(^|[^0-9])(?:\\(\\s*${currentNum}\\s*\\)|（\\s*${currentNum}\\s*）|\\[\\s*${currentNum}\\s*\\]|${currentNum}\\s*[.．、])`, 'g');
     
-    return article.replace(pattern, (match: string) => `\`${match}\``);
+    return article.replace(pattern, (match, prefix) => {
+        const target = match.substring(prefix.length);
+        return `${prefix}\`${target}\``;
+    });
   }, [currentQuestion, currentIndex]);
 
   return (

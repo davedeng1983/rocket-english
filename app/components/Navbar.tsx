@@ -88,7 +88,7 @@ export default function Navbar() {
           {user ? (
             <div className="flex items-center gap-4">
               <Link href="/profile" className="hidden md:flex flex-col items-end transition hover:opacity-70">
-                <span className="text-sm font-medium text-slate-900">{user.full_name || user.email?.split('@')[0]}</span>
+                <span className="text-sm font-medium text-slate-900">{user.full_name || user.email?.split('@')?.[0] || 'User'}</span>
                 <span className="text-xs text-slate-500">个人中心</span>
               </Link>
               
