@@ -8,6 +8,8 @@ interface AttributionDialogProps {
   userAnswer: string
   correctAnswer: string
   attemptId?: string
+  currentIndex?: number // 当前错题索引（从1开始）
+  totalCount?: number // 总错题数
   onComplete: (gapType: 'vocab' | 'grammar' | 'logic', gapDetail: string, attemptId?: string) => void
   onSkip: () => void
 }
@@ -17,6 +19,8 @@ export default function AttributionDialog({
   userAnswer,
   correctAnswer,
   attemptId,
+  currentIndex,
+  totalCount,
   onComplete,
   onSkip,
 }: AttributionDialogProps) {
@@ -34,9 +38,16 @@ export default function AttributionDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
       <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
-        <h3 className="mb-4 text-xl font-bold text-slate-900">
-          🤔 请告诉我，这道题做错的原因是什么？
-        </h3>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-xl font-bold text-slate-900">
+            🤔 请告诉我，这道题做错的原因是什么？
+          </h3>
+          {totalCount && totalCount > 1 && (
+            <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700">
+              {currentIndex || 1} / {totalCount}
+            </span>
+          )}
+        </div>
 
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4">
           <p className="mb-2 text-sm font-medium text-red-900">题目：</p>

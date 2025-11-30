@@ -709,19 +709,29 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
       </div>
 
       {/* 错题归因弹窗 (Running 状态下显示) */}
-      {showAttribution && currentWrongQuestion && (
-        <AttributionDialog
-          question={currentWrongQuestion}
-          userAnswer={userAnswers[currentWrongQuestion.id] || ''}
-          correctAnswer={currentWrongQuestion.correct_answer || ''}
-          attemptId={(window as any).__currentAttemptId || ''}
-          onComplete={handleAttributionComplete}
-          onSkip={() => {
-            setShowAttribution(false)
-            if (onComplete) onComplete()
-          }}
-        />
-      )}
+      {showAttribution && currentWrongQuestion && (() => {
+        const wrongQuestions = questions.filter(
+          (q) => userAnswers[q.id] !== q.correct_answer
+        )
+        const currentWrongIndex = wrongQuestions.findIndex(
+          (q) => q.id === currentWrongQuestion.id
+        )
+        return (
+          <AttributionDialog
+            question={currentWrongQuestion}
+            userAnswer={userAnswers[currentWrongQuestion.id] || ''}
+            correctAnswer={currentWrongQuestion.correct_answer || ''}
+            attemptId={(window as any).__currentAttemptId || ''}
+            currentIndex={currentWrongIndex + 1}
+            totalCount={wrongQuestions.length}
+            onComplete={handleAttributionComplete}
+            onSkip={() => {
+              setShowAttribution(false)
+              if (onComplete) onComplete()
+            }}
+          />
+        )
+      })()}
     </div>
   )
 }

@@ -113,6 +113,9 @@ CREATE TABLE IF NOT EXISTS learning_gaps (
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   question_id UUID REFERENCES questions(id) ON DELETE CASCADE NOT NULL,
   
+  -- 关联的考试记录（可选，用于追踪错题来源）
+  attempt_id UUID REFERENCES user_exam_attempts(id) ON DELETE SET NULL,
+  
   -- MVP 核心逻辑：记录是哪种类型的漏洞
   gap_type TEXT, -- 'vocab', 'grammar', 'logic'
   
@@ -132,6 +135,7 @@ CREATE TABLE IF NOT EXISTS learning_gaps (
 -- 为漏洞表创建索引
 CREATE INDEX IF NOT EXISTS idx_gaps_user ON learning_gaps(user_id);
 CREATE INDEX IF NOT EXISTS idx_gaps_question ON learning_gaps(question_id);
+CREATE INDEX IF NOT EXISTS idx_gaps_attempt ON learning_gaps(attempt_id);
 CREATE INDEX IF NOT EXISTS idx_gaps_type ON learning_gaps(gap_type);
 CREATE INDEX IF NOT EXISTS idx_gaps_status ON learning_gaps(status);
 -- 复合索引：查询活跃的漏洞
