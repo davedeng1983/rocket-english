@@ -7,6 +7,8 @@ import type { Question } from '@/lib/supabase/types'
 import QuestionEditor from '@/app/components/QuestionEditor'
 import { ArrowLeft, PlusCircle, Save, FileText, X } from 'lucide-react'
 
+import ReactMarkdown from 'react-markdown'
+
 export default function EditorPage({ params }: { params: Promise<{ paperId: string }> }) {
   const { paperId } = use(params)
   const router = useRouter()
@@ -162,12 +164,7 @@ export default function EditorPage({ params }: { params: Promise<{ paperId: stri
                     <div className="mb-4 rounded bg-blue-50 p-3 text-xs text-blue-700">
                         💡 提示：在此处找到丢失的原文或题目，复制并粘贴到左侧编辑器中。
                     </div>
-import ReactMarkdown from 'react-markdown'
-
-// ... existing imports ...
-
-// ... in EditorPage component ...
-
+                    
                     {paper?.structure_map?.sections ? (
                         (paper.structure_map.sections as any[]).map((section, idx) => (
                             <div key={idx} className="mb-6 border-b border-slate-100 pb-4">
