@@ -92,23 +92,27 @@ export default function AttributionDialog({
         {selectedType && (
           <div className="mb-4">
             <label className="mb-2 block text-sm font-medium text-slate-700">
-              {selectedType === 'vocab' && '请列出不认识的单词：'}
-              {selectedType === 'grammar' && '请说明不懂的语法点：'}
-              {selectedType === 'logic' && '请描述哪里读不懂：'}
+              {selectedType === 'vocab' && '📝 请列出具体不认识的单词：'}
+              {selectedType === 'grammar' && '📝 请指出不理解的句子或语法点：'}
+              {selectedType === 'logic' && '📝 请指出不理解的句子或逻辑关系：'}
             </label>
             <textarea
               value={gapDetail}
               onChange={(e) => setGapDetail(e.target.value)}
               placeholder={
                 selectedType === 'vocab'
-                  ? '例如：ambition, strategy'
+                  ? '例如：ambition（雄心）, strategy（策略）, accomplish（完成）'
                   : selectedType === 'grammar'
-                  ? '例如：被动语态的结构'
-                  : '例如：不理解句子的逻辑关系'
+                  ? '例如：第2句话的被动语态 "was asked" 不理解'
+                  : '例如：第3句话 "If we truly want to..." 不理解其中的逻辑关系'
               }
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              rows={3}
+              rows={4}
             />
+            <p className="mt-1 text-xs text-slate-500">
+              {selectedType === 'vocab' && '💡 提示：多个单词请用逗号分隔，可以在括号内添加中文意思（可选）'}
+              {selectedType !== 'vocab' && '💡 提示：请尽量具体，例如："第X句话的...不理解" 或 "XX语法点不清楚"'}
+            </p>
           </div>
         )}
 

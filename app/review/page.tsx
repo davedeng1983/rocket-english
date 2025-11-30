@@ -5,8 +5,24 @@ import { useRouter } from 'next/navigation'
 import { getCurrentUser } from '@/lib/supabase/auth'
 import type { LearningGap, Question } from '@/lib/supabase/types'
 import AttributionDialog from '@/app/components/AttributionDialog'
+import ReactMarkdown from 'react-markdown'
+import { BookOpen } from 'lucide-react'
 
 type LearningGapWithQuestion = LearningGap & { questions: Question | null }
+
+// 稳定的 ReactMarkdown 组件配置
+const markdownComponents = {
+  img: ({ node, ...props }: any) => (
+    <img 
+      {...props} 
+      className="my-4 max-h-[400px] max-w-full rounded-lg border border-slate-200 object-contain shadow-sm"
+      onError={(e: any) => {
+        e.currentTarget.style.display = 'none';
+      }}
+    />
+  ),
+  p: ({ node, ...props }: any) => <p className="mb-4" {...props} />,
+};
 
 export default function ReviewPage() {
   const router = useRouter()
@@ -231,22 +247,55 @@ export default function ReviewPage() {
 
         {/* 题目卡片 */}
         <div className="mb-6 rounded-2xl border-2 border-red-200 bg-red-50 p-6 shadow-lg">
-          <div className="mb-4">
+          <div className="mb-4 flex items-center justify-between">
             <span className="rounded-full bg-red-100 px-3 py-1 text-sm font-medium text-red-700">
               ⚠️ 错题重练
             </span>
+            <span className="text-xs text-slate-500">
+              {new Date(currentGap.created_at).toLocaleDateString('zh-CN')}
+            </span>
           </div>
 
-          <div className="mb-4">
-            <p className="text-sm text-red-600">
-              之前错误原因：{currentGap.gap_detail || '未知'}
-            </p>
-          </div>
+          {/* 显示之前记录的问题详情 */}
+          {currentGap.gap_detail && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <div className="mb-1 flex items-center gap-2">
+                <span className="text-xs font-semibold text-amber-800">
+                  {currentGap.gap_type === 'vocab' && '📚 不认识的单词：'}
+                  {currentGap.gap_type === 'grammar' && '📖 不理解的语法点：'}
+                  {currentGap.gap_type === 'logic' && '🧠 不理解的句子：'}
+                  {!currentGap.gap_type && '❓ 问题记录：'}
+                </span>
+              </div>
+              <p className="text-sm font-medium text-amber-900">
+                {currentGap.gap_detail}
+              </p>
+            </div>
+          )}
 
-          <div className="mb-6">
-            <p className="text-lg leading-relaxed text-slate-900">
-              {currentQuestion.content}
-            </p>
+          {/* 阅读理解原文 */}
+          {currentQuestion.meta && 
+          typeof currentQuestion.meta === 'object' && 
+          'article' in currentQuestion.meta && 
+          (currentQuestion.meta as any).article && (
+            <div className="mb-6 rounded-lg bg-slate-50 p-4 text-sm leading-relaxed text-slate-700">
+              <div className="mb-2 flex items-center gap-2">
+                <BookOpen className="text-blue-500" size={16} />
+                <h4 className="font-bold text-slate-600">阅读材料</h4>
+              </div>
+              <div className="markdown-content">
+                <ReactMarkdown urlTransform={(url) => url} components={markdownComponents}>
+                  {String((currentQuestion.meta as any).article || '')}
+                </ReactMarkdown>
+              </div>
+            </div>
+          )}
+
+          {/* 题目内容 */}
+          <div className="mb-6 text-lg leading-relaxed text-slate-900 markdown-content">
+            <ReactMarkdown urlTransform={(url) => url} components={markdownComponents}>
+              {String(currentQuestion.content || '')}
+            </ReactMarkdown>
           </div>
 
           {/* 选项 */}
