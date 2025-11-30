@@ -458,11 +458,13 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
                  <div className="mb-6 rounded-lg bg-slate-50 p-4 text-sm leading-relaxed text-slate-700 markdown-content">
                      <h4 className="mb-2 font-bold text-slate-500">阅读材料</h4>
                      <ReactMarkdown
+                        urlTransform={(url) => url}
                         components={{
                           img: ({ node, ...props }) => (
                             <img 
                               {...props} 
                               className="my-4 max-h-[400px] max-w-full rounded-lg border border-slate-200 object-contain shadow-sm"
+                              onError={(e) => console.error('Image load error:', props.src?.substring(0, 50) + '...')}
                             />
                           ),
                           p: ({ node, ...props }) => <p className="mb-4" {...props} />
@@ -476,11 +478,13 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
             {/* 题目内容 */}
             <div className="mb-6 text-lg leading-relaxed text-slate-900 markdown-content">
                <ReactMarkdown
+                  urlTransform={(url) => url}
                   components={{
                     img: ({ node, ...props }) => (
                       <img 
                         {...props} 
                         className="my-4 max-h-[400px] max-w-full rounded-lg border border-slate-200 object-contain shadow-sm"
+                        onError={(e) => console.error('Image load error:', props.src?.substring(0, 50) + '...')}
                       />
                     ),
                     p: ({ node, ...props }) => <p className="mb-4" {...props} />
