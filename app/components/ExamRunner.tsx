@@ -344,18 +344,22 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
 
     // 创建学习漏洞（使用 API 路由）
     try {
-      await fetch('/api/learning-gaps/create', {
+      const response = await fetch('/api/learning-gaps/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           questionId: currentWrongQuestion.id,
-          attemptId,
+          attemptId: attemptId || (window as any).__currentAttemptId || '',
           gapType,
           gapDetail,
           userAnswer: userAnswers[currentWrongQuestion.id] || '',
           correctAnswer: currentWrongQuestion.correct_answer || '',
         }),
       })
+      
+      if (!response.ok) {
+        console.error('Failed to create learning gap')
+      }
     } catch (error) {
       console.error('Failed to create learning gap:', error)
     }
@@ -369,8 +373,12 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
     )
 
     if (currentWrongIndex < wrongQuestions.length - 1) {
-      // 还有错题，显示下一个
-      setCurrentWrongQuestion(wrongQuestions[currentWrongIndex + 1])
+      // 还有错题，短暂延迟后显示下一个（给用户反馈时间）
+      setTimeout(() => {
+        setCurrentWrongQuestion(wrongQuestions[currentWrongIndex + 1])
+        // 确保对话框保持打开
+        setShowAttribution(true)
+      }, 300)
     } else {
       // 所有错题都已处理
       setShowAttribution(false)

@@ -34,6 +34,7 @@ export default function ReviewPage() {
   const [currentWrongQuestion, setCurrentWrongQuestion] = useState<Question | null>(null)
   const [loading, setLoading] = useState(true)
   const [reviewCompleted, setReviewCompleted] = useState(false)
+  const [showAnswer, setShowAnswer] = useState(false) // 是否显示答案和解析
 
   useEffect(() => {
     checkAuthAndLoadGaps()
@@ -82,12 +83,14 @@ export default function ReviewPage() {
 
   const handleNext = () => {
     if (currentIndex < gaps.length - 1) {
+      setShowAnswer(false) // 切换到下一题时重置显示状态
       setCurrentIndex(currentIndex + 1)
     }
   }
 
   const handlePrevious = () => {
     if (currentIndex > 0) {
+      setShowAnswer(false) // 切换到上一题时重置显示状态
       setCurrentIndex(currentIndex - 1)
     }
   }
@@ -99,20 +102,27 @@ export default function ReviewPage() {
     const userAnswer = userAnswers[currentGap.questions.id] || ''
     const correctAnswer = currentGap.questions.correct_answer || ''
 
+    // 显示答案和解析
+    setShowAnswer(true)
+
     if (userAnswer === correctAnswer) {
       // 答对了，创建 learning_action 标记掌握
       createMasterAction(currentGap.id)
-      
-      // 如果还有下一题，继续
-      if (currentIndex < gaps.length - 1) {
-        setCurrentIndex(currentIndex + 1)
-      } else {
-        setReviewCompleted(true)
-      }
     } else {
-      // 答错了，显示归因弹窗
-      setCurrentWrongQuestion(currentGap.questions)
-      setShowAttribution(true)
+      // 答错了，稍后显示归因弹窗
+      setTimeout(() => {
+        setCurrentWrongQuestion(currentGap.questions)
+        setShowAttribution(true)
+      }, 1000)
+    }
+  }
+
+  const handleNextAfterAnswer = () => {
+    setShowAnswer(false)
+    if (currentIndex < gaps.length - 1) {
+      setCurrentIndex(currentIndex + 1)
+    } else {
+      setReviewCompleted(true)
     }
   }
 
@@ -304,6 +314,7 @@ export default function ReviewPage() {
               {(currentQuestion.options as string[]).map((option: string, index: number) => {
                 const optionLabel = String.fromCharCode(65 + index)
                 const isSelected = userAnswers[currentQuestion.id] === optionLabel
+                const isCorrect = optionLabel === currentQuestion.correct_answer
 
                 return (
                   <button
@@ -311,16 +322,61 @@ export default function ReviewPage() {
                     onClick={() => handleSelectAnswer(optionLabel)}
                     className={`w-full rounded-lg border-2 p-4 text-left transition ${
                       isSelected
-                        ? 'border-blue-500 bg-blue-50'
+                        ? isCorrect
+                          ? 'border-green-500 bg-green-50'
+                          : 'border-blue-500 bg-blue-50'
+                        : isCorrect
+                        ? 'border-green-300 bg-green-50'
                         : 'border-slate-200 bg-white hover:border-slate-300'
                     }`}
                   >
                     <span className="font-medium text-slate-700">
                       {optionLabel}. {option}
+                      {isCorrect && <span className="ml-2 text-xs text-green-600">✓ 正确答案</span>}
                     </span>
                   </button>
                 )
               })}
+            </div>
+          )}
+
+          {/* 显示解析和知识点（提交答案后显示） */}
+          {showAnswer && (currentQuestion.analysis || (currentQuestion.meta && typeof currentQuestion.meta === 'object' && (currentQuestion.meta as any).kps && Array.isArray((currentQuestion.meta as any).kps) && (currentQuestion.meta as any).kps.length > 0)) && (
+            <div className="mt-6 space-y-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+              {currentQuestion.analysis && (
+                <div>
+                  <h4 className="mb-2 flex items-center gap-2 text-sm font-bold text-blue-900">
+                    <span>📖</span> 解析
+                  </h4>
+                  <p className="text-sm leading-relaxed text-blue-800 markdown-content">
+                    <ReactMarkdown urlTransform={(url) => url} components={markdownComponents}>
+                      {String(currentQuestion.analysis)}
+                    </ReactMarkdown>
+                  </p>
+                </div>
+              )}
+              
+              {currentQuestion.meta && 
+              typeof currentQuestion.meta === 'object' && 
+              (currentQuestion.meta as any).kps && 
+              Array.isArray((currentQuestion.meta as any).kps) && 
+              (currentQuestion.meta as any).kps.length > 0 && (
+                <div>
+                  <h4 className="mb-2 flex items-center gap-2 text-sm font-bold text-blue-900">
+                    <span>📚</span> 知识点
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {((currentQuestion.meta as any).kps as string[]).map((kp: string, idx: number) => (
+                      <span 
+                        key={idx}
+                        className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700"
+                      >
+                        {kp.replace(/\./g, ' / ')}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -335,20 +391,31 @@ export default function ReviewPage() {
             上一题
           </button>
 
-          {currentIndex === gaps.length - 1 ? (
+          {showAnswer ? (
             <button
-              onClick={handleSubmit}
-              className="rounded-lg bg-green-600 px-6 py-2 font-medium text-white transition hover:bg-green-700"
-            >
-              提交答案
-            </button>
-          ) : (
-            <button
-              onClick={handleSubmit}
+              onClick={handleNextAfterAnswer}
               className="rounded-lg bg-blue-600 px-6 py-2 font-medium text-white transition hover:bg-blue-700"
             >
-              提交并下一题
+              {currentIndex === gaps.length - 1 ? '完成复习' : '下一题'}
             </button>
+          ) : (
+            <>
+              {currentIndex === gaps.length - 1 ? (
+                <button
+                  onClick={handleSubmit}
+                  className="rounded-lg bg-green-600 px-6 py-2 font-medium text-white transition hover:bg-green-700"
+                >
+                  提交答案
+                </button>
+              ) : (
+                <button
+                  onClick={handleSubmit}
+                  className="rounded-lg bg-blue-600 px-6 py-2 font-medium text-white transition hover:bg-blue-700"
+                >
+                  提交答案
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
