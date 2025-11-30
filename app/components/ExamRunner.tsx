@@ -150,6 +150,10 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
   const [viewState, setViewState] = useState<'overview' | 'running' | 'result' | 'result_detail'>('overview')
   const [showResultDetail, setShowResultDetail] = useState(false)
   const [completedSections, setCompletedSections] = useState<Set<string>>(new Set())
+  // 新增：存储每道题的实时对错状态和已归因的错题信息
+  const [questionStatus, setQuestionStatus] = useState<Record<string, { isCorrect: boolean; userAnswer: string; correctAnswer: string }>>({})
+  const [pendingAttributions, setPendingAttributions] = useState<Array<{ questionId: string; gapType: 'vocab' | 'grammar' | 'logic'; gapDetail: string; userAnswer: string; correctAnswer: string }>>([])
+  const [waitingForAttribution, setWaitingForAttribution] = useState(false) // 是否正在等待归因
 
   useEffect(() => {
     loadExamData()
@@ -316,14 +320,39 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
     }
   }
 
-  const handleSelectAnswer = (answer: string) => {
+  const handleSelectAnswer = async (answer: string) => {
     const currentQuestion = questions[currentIndex]
     if (!currentQuestion) return
 
-    setUserAnswers((prev) => ({
-      ...prev,
+    // 保存答案
+    const newAnswers = {
+      ...userAnswers,
       [currentQuestion.id]: answer,
+    }
+    setUserAnswers(newAnswers)
+
+    // 判断对错
+    const isCorrect = answer === currentQuestion.correct_answer
+    
+    // 更新题目状态
+    setQuestionStatus((prev) => ({
+      ...prev,
+      [currentQuestion.id]: {
+        isCorrect,
+        userAnswer: answer,
+        correctAnswer: currentQuestion.correct_answer || '',
+      },
     }))
+
+    // 如果答错了，立即弹出归因对话框
+    if (!isCorrect) {
+      setWaitingForAttribution(true)
+      setCurrentWrongQuestion(currentQuestion)
+      setShowAttribution(true)
+    } else {
+      // 答对了，可以自动继续下一题（可选）或者等用户点击下一题
+      // 这里先不自动跳转，让用户自己控制
+    }
   }
 
   const handleNext = () => {
@@ -446,51 +475,30 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
   ) => {
     if (!currentWrongQuestion) return
 
-    // 创建学习漏洞（使用 API 路由）
-    try {
-      const response = await fetch('/api/learning-gaps/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          questionId: currentWrongQuestion.id,
-          attemptId: attemptId || (window as any).__currentAttemptId || '',
-          gapType,
-          gapDetail,
-          userAnswer: userAnswers[currentWrongQuestion.id] || '',
-          correctAnswer: currentWrongQuestion.correct_answer || '',
-        }),
-      })
-      
-      if (!response.ok) {
-        console.error('Failed to create learning gap')
-      }
-    } catch (error) {
-      console.error('Failed to create learning gap:', error)
+    // 保存归因信息到临时数组（等最后提交时统一保存）
+    const attribution = {
+      questionId: currentWrongQuestion.id,
+      gapType,
+      gapDetail,
+      userAnswer: userAnswers[currentWrongQuestion.id] || '',
+      correctAnswer: currentWrongQuestion.correct_answer || '',
     }
+    
+    setPendingAttributions((prev) => [...prev, attribution])
 
-    // 处理下一个错题
-    const wrongQuestions = questions.filter(
-      (q) => userAnswers[q.id] !== q.correct_answer
-    )
-    const currentWrongIndex = wrongQuestions.findIndex(
-      (q) => q.id === currentWrongQuestion.id
-    )
+    // 关闭归因对话框
+    setShowAttribution(false)
+    setCurrentWrongQuestion(null)
+    setWaitingForAttribution(false)
 
-    if (currentWrongIndex < wrongQuestions.length - 1) {
-      // 还有错题，短暂延迟后显示下一个（给用户反馈时间）
+    // 自动跳转到下一题
+    if (currentIndex < questions.length - 1) {
       setTimeout(() => {
-        setCurrentWrongQuestion(wrongQuestions[currentWrongIndex + 1])
-        // 确保对话框保持打开
-        setShowAttribution(true)
+        setCurrentIndex(currentIndex + 1)
       }, 300)
     } else {
-      // 所有错题都已处理完成
-      setShowAttribution(false)
-      setCurrentWrongQuestion(null)
-      // 刷新完成的部分列表
-      loadCompletedSections()
-      // 不自动调用 onComplete，让用户留在结果页面查看详情
-      // 用户可以主动点击"查看分析报告"按钮退出
+      // 已经是最后一题了，可以提示用户提交
+      // 或者自动提交（如果所有题目都答完了）
     }
   }
 
@@ -1096,11 +1104,22 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
         const currentWrongIndex = wrongQuestions.findIndex(
           (q) => q.id === currentWrongQuestion.id
         )
+        
+        // 格式化正确答案显示：如果是选项字母，显示完整选项内容
+        let formattedCorrectAnswer = currentWrongQuestion.correct_answer || ''
+        if (currentWrongQuestion.options && Array.isArray(currentWrongQuestion.options) && formattedCorrectAnswer) {
+          const correctIndex = formattedCorrectAnswer.charCodeAt(0) - 65 // A=0, B=1, C=2, D=3
+          if (correctIndex >= 0 && correctIndex < currentWrongQuestion.options.length) {
+            const optionText = currentWrongQuestion.options[correctIndex]
+            formattedCorrectAnswer = `${formattedCorrectAnswer}. ${optionText}`
+          }
+        }
+        
         return (
           <AttributionDialog
             question={currentWrongQuestion}
             userAnswer={userAnswers[currentWrongQuestion.id] || ''}
-            correctAnswer={currentWrongQuestion.correct_answer || ''}
+            correctAnswer={formattedCorrectAnswer}
             attemptId={(window as any).__currentAttemptId || ''}
             currentIndex={currentWrongIndex + 1}
             totalCount={wrongQuestions.length}
@@ -1108,8 +1127,7 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
             onSkip={() => {
               setShowAttribution(false)
               setCurrentWrongQuestion(null)
-              // 跳过归因后，留在结果页面，让用户查看详情
-              // 用户可以主动点击按钮退出
+              setWaitingForAttribution(false)
             }}
           />
         )
