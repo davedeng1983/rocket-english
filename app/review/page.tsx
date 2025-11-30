@@ -144,7 +144,7 @@ export default function ReviewPage() {
   }
 
   const handleAttributionComplete = async (
-    gapType: 'vocab' | 'grammar' | 'logic',
+    gapType: 'vocab' | 'grammar' | 'logic' | 'careless',
     gapDetail: string,
     knowledgePoints: string[] = [], // 新增：知识点列表
     attemptId?: string

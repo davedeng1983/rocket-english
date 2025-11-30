@@ -11,7 +11,7 @@ interface AttributionDialogProps {
   attemptId?: string
   currentIndex?: number // 当前错题索引（从1开始）
   totalCount?: number // 总错题数
-  onComplete: (gapType: 'vocab' | 'grammar' | 'logic', gapDetail: string, knowledgePoints: string[], attemptId?: string) => void
+  onComplete: (gapType: 'vocab' | 'grammar' | 'logic' | 'careless', gapDetail: string, knowledgePoints: string[], attemptId?: string) => void
   onSkip: () => void
 }
 
@@ -25,12 +25,20 @@ export default function AttributionDialog({
   onComplete,
   onSkip,
 }: AttributionDialogProps) {
-  const [selectedType, setSelectedType] = useState<'vocab' | 'grammar' | 'logic' | null>(null)
+  const [selectedType, setSelectedType] = useState<'vocab' | 'grammar' | 'logic' | 'careless' | null>(null)
   const [gapDetail, setGapDetail] = useState('')
   const [showKnowledgePoints, setShowKnowledgePoints] = useState(false) // 是否显示知识点选择
 
   const handleSubmit = () => {
     if (selectedType && gapDetail.trim()) {
+      // 粗心大意不需要知识点选择，直接完成
+      if (selectedType === 'careless') {
+        onComplete(selectedType, gapDetail.trim() || '粗心大意', [], attemptId || '')
+        setSelectedType(null)
+        setGapDetail('')
+        return
+      }
+
       // 如果有题目知识点，显示知识点选择界面
       const questionKps = question.meta && typeof question.meta === 'object' && 'kps' in question.meta
         ? (question.meta as any).kps
@@ -90,7 +98,7 @@ export default function AttributionDialog({
 
         <div className="mb-4">
           <p className="mb-3 text-sm font-medium text-slate-700">错误原因：</p>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <button
               onClick={() => setSelectedType('vocab')}
               className={`rounded-lg border-2 p-3 text-sm font-medium transition ${
@@ -121,6 +129,16 @@ export default function AttributionDialog({
             >
               🧠 逻辑不清
             </button>
+            <button
+              onClick={() => setSelectedType('careless')}
+              className={`rounded-lg border-2 p-3 text-sm font-medium transition ${
+                selectedType === 'careless'
+                  ? 'border-blue-500 bg-blue-50 text-blue-700'
+                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+              }`}
+            >
+              😅 粗心大意
+            </button>
           </div>
         </div>
 
@@ -130,6 +148,7 @@ export default function AttributionDialog({
               {selectedType === 'vocab' && '📝 请列出具体不认识的单词：'}
               {selectedType === 'grammar' && '📝 请指出不理解的句子或语法点：'}
               {selectedType === 'logic' && '📝 请指出不理解的句子或逻辑关系：'}
+              {selectedType === 'careless' && '📝 请简单描述一下粗心的原因（可选）：'}
             </label>
             <textarea
               value={gapDetail}
@@ -139,14 +158,17 @@ export default function AttributionDialog({
                   ? '例如：ambition（雄心）, strategy（策略）, accomplish（完成）'
                   : selectedType === 'grammar'
                   ? '例如：第2句话的被动语态 "was asked" 不理解'
-                  : '例如：第3句话 "If we truly want to..." 不理解其中的逻辑关系'
+                  : selectedType === 'logic'
+                  ? '例如：第3句话 "If we truly want to..." 不理解其中的逻辑关系'
+                  : '例如：看错了选项、计算错误、抄写错误等'
               }
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               rows={4}
             />
             <p className="mt-1 text-xs text-slate-500">
               {selectedType === 'vocab' && '💡 提示：多个单词请用逗号分隔，可以在括号内添加中文意思（可选）'}
-              {selectedType !== 'vocab' && '💡 提示：请尽量具体，例如："第X句话的...不理解" 或 "XX语法点不清楚"'}
+              {selectedType === 'careless' && '💡 提示：粗心大意的原因可以简单描述，也可以不填写'}
+              {selectedType !== 'vocab' && selectedType !== 'careless' && '💡 提示：请尽量具体，例如："第X句话的...不理解" 或 "XX语法点不清楚"'}
             </p>
           </div>
         )}
@@ -182,10 +204,10 @@ export default function AttributionDialog({
           {!showKnowledgePoints && (
             <button
               onClick={handleSubmit}
-              disabled={!selectedType || !gapDetail.trim()}
+              disabled={!selectedType || (selectedType !== 'careless' && !gapDetail.trim())}
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              下一步 →
+              {selectedType === 'careless' ? '确认' : '下一步 →'}
             </button>
           )}
         </div>

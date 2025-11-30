@@ -152,7 +152,7 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
   const [completedSections, setCompletedSections] = useState<Set<string>>(new Set())
   // 新增：存储每道题的实时对错状态和已归因的错题信息
   const [questionStatus, setQuestionStatus] = useState<Record<string, { isCorrect: boolean; userAnswer: string; correctAnswer: string }>>({})
-  const [pendingAttributions, setPendingAttributions] = useState<Array<{ questionId: string; gapType: 'vocab' | 'grammar' | 'logic'; gapDetail: string; knowledgePoints: string[]; userAnswer: string; correctAnswer: string }>>([])
+  const [pendingAttributions, setPendingAttributions] = useState<Array<{ questionId: string; gapType: 'vocab' | 'grammar' | 'logic' | 'careless'; gapDetail: string; knowledgePoints: string[]; userAnswer: string; correctAnswer: string }>>([])
   const [waitingForAttribution, setWaitingForAttribution] = useState(false) // 是否正在等待归因
 
   useEffect(() => {
@@ -486,7 +486,7 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
   }
 
   const handleAttributionComplete = async (
-    gapType: 'vocab' | 'grammar' | 'logic',
+    gapType: 'vocab' | 'grammar' | 'logic' | 'careless',
     gapDetail: string,
     knowledgePoints: string[] = [],
     attemptId?: string

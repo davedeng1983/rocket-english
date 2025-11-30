@@ -67,7 +67,7 @@ export async function createLearningGap(
   userId: string,
   questionId: string,
   attemptId: string,
-  gapType: 'vocab' | 'grammar' | 'logic',
+  gapType: 'vocab' | 'grammar' | 'logic' | 'careless',
   gapDetail: string,
   knowledgePoints: string[] = [], // 新增：知识点列表
   userAnswer: string,

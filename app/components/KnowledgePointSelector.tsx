@@ -10,7 +10,7 @@ interface KnowledgePoint {
 }
 
 interface KnowledgePointSelectorProps {
-  gapType: 'vocab' | 'grammar' | 'logic'
+  gapType: 'vocab' | 'grammar' | 'logic' | 'careless'
   gapDetail: string
   questionContent: string
   questionKnowledgePoints?: string[] // 题目已有的知识点代码

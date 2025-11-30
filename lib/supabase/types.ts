@@ -81,7 +81,7 @@ export interface LearningGap {
   id: string
   user_id: string
   question_id: string
-  gap_type: 'vocab' | 'grammar' | 'logic' | null
+  gap_type: 'vocab' | 'grammar' | 'logic' | 'careless' | null
   gap_detail: string | null // e.g. "不认识单词 ambition" 或 "不懂被动语态"
   root_cause: Json | null // 【扩展预留】根因分析
   status: 'active' | 'solved'
