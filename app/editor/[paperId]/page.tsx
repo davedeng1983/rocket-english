@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { getCurrentUser } from '@/lib/supabase/auth'
 import type { Question } from '@/lib/supabase/types'
 import QuestionEditor from '@/app/components/QuestionEditor'
-import { ArrowLeft, PlusCircle, Save } from 'lucide-react'
+import { ArrowLeft, PlusCircle, Save, FileText, X } from 'lucide-react'
 
 export default function EditorPage({ params }: { params: Promise<{ paperId: string }> }) {
   const { paperId } = use(params)
@@ -13,6 +13,7 @@ export default function EditorPage({ params }: { params: Promise<{ paperId: stri
   const [paper, setPaper] = useState<any>(null)
   const [questions, setQuestions] = useState<Question[]>([])
   const [loading, setLoading] = useState(true)
+  const [showRawText, setShowRawText] = useState(false)
   
   // To refresh data
   const [refreshKey, setRefreshKey] = useState(0)
@@ -132,6 +133,12 @@ export default function EditorPage({ params }: { params: Promise<{ paperId: stri
             </div>
             <div className="flex gap-2">
                 <button 
+                    onClick={() => setShowRawText(true)}
+                    className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                    <FileText size={16} /> 查看原始文稿
+                </button>
+                <button 
                     onClick={handleAddQuestion}
                     className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
                 >
@@ -140,6 +147,35 @@ export default function EditorPage({ params }: { params: Promise<{ paperId: stri
             </div>
         </div>
       </div>
+
+      {/* Raw Text Sidebar */}
+      {showRawText && (
+        <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md border-l border-slate-200 bg-white shadow-2xl">
+            <div className="flex h-full flex-col">
+                <div className="flex items-center justify-between border-b p-4">
+                    <h2 className="font-bold text-slate-800">原始识别文稿</h2>
+                    <button onClick={() => setShowRawText(false)} className="text-slate-500 hover:text-slate-800">
+                        <X size={20} />
+                    </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 text-sm leading-relaxed text-slate-600">
+                    <div className="mb-4 rounded bg-blue-50 p-3 text-xs text-blue-700">
+                        💡 提示：在此处找到丢失的原文或题目，复制并粘贴到左侧编辑器中。
+                    </div>
+                    {paper?.structure_map?.sections ? (
+                        (paper.structure_map.sections as any[]).map((section, idx) => (
+                            <div key={idx} className="mb-6">
+                                <h3 className="mb-2 font-bold text-slate-900 bg-slate-100 p-1 rounded">{section.title}</h3>
+                                <pre className="whitespace-pre-wrap font-mono text-xs">{section.content}</pre>
+                            </div>
+                        ))
+                    ) : (
+                        <p>暂无原始文稿数据 (请重新导入试卷以获取)</p>
+                    )}
+                </div>
+            </div>
+        </div>
+      )}
 
       <div className="container mx-auto max-w-4xl px-4 py-8">
         {/* Statistics */}

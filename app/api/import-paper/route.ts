@@ -85,7 +85,7 @@ export async function POST(request: Request) {
         year: metadata.year,
         region: metadata.region,
         structure_map: {
-          sections: [],
+          sections: sections.map(s => ({ title: s.title, content: s.content })), // 保存原始分块内容供人工校对
           total_questions: questions.length,
         },
       })
