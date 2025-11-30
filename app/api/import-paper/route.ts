@@ -295,7 +295,7 @@ function extractQuestions(text: string): { questions: ParsedQuestion[], parsingL
        sectionQuestions = parseNoOptionBlock(content, orderIndex, 'reading', true)
        parsingLog.push(`  - Strict mode yielded ${sectionQuestions.length} questions`)
        
-       // 智能熔断与降级：如果严格模式解析出的数量远少于预期
+       // 智能熔断与降级
        if ((targetCount > 0 && sectionQuestions.length < targetCount) || (sectionQuestions.length === 0 && targetCount > 0)) {
            parsingLog.push(`  - Falling back to loose mode + continuity check`)
            sectionQuestions = parseNoOptionBlock(content, orderIndex, 'reading', false)
@@ -336,7 +336,8 @@ function extractQuestions(text: string): { questions: ParsedQuestion[], parsingL
   return { questions, parsingLog }
 }
 
-// ... parseStandardBlock 保持不变 ...
+// === 标准带选项题目解析 (单选、完形) ===
+// supportArticle: 是否支持文章前置（如完形）
 function parseStandardBlock(text: string, startIndex: number, type: ParsedQuestion['sectionType'], supportArticle = false): ParsedQuestion[] {
   const questions: ParsedQuestion[] = []
   let currentOrder = startIndex
@@ -351,19 +352,27 @@ function parseStandardBlock(text: string, startIndex: number, type: ParsedQuesti
       }
   }
 
-  // 宽松的题号分割：只要是数字开头就行
-  const questionSplitPattern = /(?=\d+[.．、]\s*[（(]?\s*\d*\.?\d*\s*分?[）)]?)/g
+  // 宽松的题号分割：支持 (1), ①, [1], 1., 1、 等格式
+  // 关键更新：增强了分割正则
+  const questionSplitPattern = /(?=(?:^|\n)\s*(?:\d+[.．、]|[（(]\d+[）)]|\[\d+\]|①|②|③|④|⑤|⑥|⑦|⑧|⑨|⑩))/g
   const rawBlocks = contentText.split(questionSplitPattern)
 
   for (const block of rawBlocks) {
     // 必须包含 A. B. C. D. 选项才算标准题
-    if (block.length < 10 || !block.match(/^\d+[.．、]/) || !block.includes('A')) continue
+    // 检查是否有题号
+    const hasNumber = block.match(/(?:^|\n)\s*(?:(\d+)[.．、]|[（(](\d+)[）)]|\[(\d+)\]|(①|②|③|④|⑤|⑥|⑦|⑧|⑨|⑩))/)
+    if (block.length < 10 || !hasNumber || !block.includes('A')) continue
     
     const q = parseQuestionBlock(block)
     if (q) {
         q.sectionType = type
         // 尝试从题号字符串解析数字，如果失败则递增
-        const num = parseInt(q.number)
+        let numStr = q.number
+        // 处理特殊序号
+        const specialMap: Record<string, number> = { '①':1, '②':2, '③':3, '④':4, '⑤':5 } // ...
+        let num = parseInt(numStr)
+        if (isNaN(num) && specialMap[numStr]) num = specialMap[numStr]
+        
         q.orderIndex = !isNaN(num) ? num : ++currentOrder
         if (supportArticle) q.article = article
         questions.push(q)
@@ -372,13 +381,14 @@ function parseStandardBlock(text: string, startIndex: number, type: ParsedQuesti
   return questions
 }
 
-// ... parseReading 保持不变 ...
+// === 阅读理解解析 (多篇文章) ===
 function parseReading(text: string, startIndex: number): ParsedQuestion[] {
+    // 增强：阅读理解可能包含 41-45 这种连字符题号
+    // 但由于我们还是按单题拆分，这里主要依赖 parseStandardBlock 的增强
     return parseStandardBlock(text, startIndex, 'reading', true)
 }
 
 // === 无选项题目解析 (阅读表达、作文) ===
-// strictMode: 如果为 true，则必须包含 "分" 或 "答案/解析" 等关键词才算题目
 function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuestion['sectionType'], strictMode: boolean): ParsedQuestion[] {
     const questions: ParsedQuestion[] = []
     let currentOrder = startIndex
@@ -408,17 +418,21 @@ function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuesti
         }
     }
 
-    const rawBlocks = contentText.split(/(?=\d+[.．、])/g)
+    // 增强的分割正则
+    const rawBlocks = contentText.split(/(?=(?:^|\n)\s*(?:\d+[.．、]|[（(]\d+[）)]|\[\d+\]))/g)
     
     for (const block of rawBlocks) {
-        if (block.length < 5 || !block.match(/^\d+[.．、]/)) continue
+        if (block.length < 5) continue
         
-        const headerMatch = block.match(/^(\d+)[.．、]\s*(?:[（(](\d*\.?\d*)\s*分?[）)])?\s*/)
+        // 增强的题号提取：支持 1. 或 (1) 或 [1]
+        // 并且支持忽略前面的 (2分) 等干扰
+        const headerMatch = block.match(/(?:^|\n)\s*(?:(?:[（(]\d+分[）)])\s*)?(?:(\d+)[.．、]|[（(](\d+)[）)]|\[(\d+)\])/)
         if (!headerMatch) continue
         
-        const numberStr = headerMatch[1]
+        const numberStr = headerMatch[1] || headerMatch[2] || headerMatch[3]
         const number = parseInt(numberStr)
-        let content = block.substring(headerMatch[0].length).trim()
+        // 提取内容：去掉题号部分
+        let content = block.replace(headerMatch[0], '').trim()
 
         // 智能校验
         let isQuestion = false;
@@ -428,13 +442,13 @@ function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuesti
             const hasAnswerKey = block.includes('【答案】') || block.includes('【解析】')
             if (hasScore || hasAnswerKey) isQuestion = true;
         } else {
-            // 宽松模式：断号容忍
+            // 宽松模式
             const hasScore = block.match(/[（(]\s*\d+\s*分\s*[）)]/)
             const hasAnswerKey = block.includes('【答案】') || block.includes('【解析】')
             if (hasScore || hasAnswerKey) {
                 isQuestion = true;
             } 
-            // 关键修改：允许适度的断号 (比如中间隔了1-5题)
+            // 允许适度的断号 (1-5)
             else if (!isNaN(number) && number > currentOrder && number <= currentOrder + 5) {
                 isQuestion = true;
             }
@@ -465,7 +479,6 @@ function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuesti
 
         if (content.length < 2) continue;
 
-        // 只有确认是题目后，才更新 currentOrder
         if (!isNaN(number)) currentOrder = number;
 
         questions.push({
@@ -486,11 +499,13 @@ function parseNoOptionBlock(text: string, startIndex: number, type: ParsedQuesti
 
 // ... parseQuestionBlock 保持不变 ...
 function parseQuestionBlock(block: string): ParsedQuestion | null {
-    const headerMatch = block.match(/^(\d+)[.．、]\s*(?:[（(](\d*\.?\d*)\s*分?[）)])?\s*/)
+    // 增强题号匹配
+    const headerMatch = block.match(/(?:^|\n)\s*(?:(?:[（(]\d+分[）)])\s*)?(?:(\d+)[.．、]|[（(](\d+)[）)]|\[(\d+)\]|(①|②|③|④|⑤))/)
     if (!headerMatch) return null
     
-    const number = headerMatch[1]
-    const rawContent = block.substring(headerMatch[0].length)
+    const number = headerMatch[1] || headerMatch[2] || headerMatch[3] || headerMatch[4]
+    // 移除题号
+    const rawContent = block.replace(headerMatch[0], '').trim()
 
     let correctAnswer: string | undefined
     let analysis: string | undefined
