@@ -40,7 +40,6 @@ export default function ImportPage() {
       return
     }
 
-    // 检查用户登录
     const { user } = await getCurrentUser()
     if (!user) {
       router.push('/auth/login?redirect=/import')
@@ -48,61 +47,80 @@ export default function ImportPage() {
     }
 
     setUploading(true)
-    setProgress(0) // 重置进度
+    setProgress(0)
     setResult(null)
-
-    // 模拟进度条 (因为 fetch 不支持原生的上传进度，除非用 XHR)
-    // 这是一个视觉欺骗，让用户感觉系统在工作
-    const timer = setInterval(() => {
-      setProgress((oldProgress) => {
-        if (oldProgress === 100) {
-          return 100;
-        }
-        const diff = Math.random() * 10;
-        return Math.min(oldProgress + diff, 95);
-      });
-    }, 500);
 
     try {
       const formData = new FormData()
       formData.append('file', file)
 
-      const response = await fetch('/api/import-paper', {
-        method: 'POST',
-        body: formData,
-      })
+      // Use XMLHttpRequest for real progress tracking
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', '/api/import-paper', true)
+      // xhr.setRequestHeader('Authorization', `Bearer ${user.token}`) // Cookies handle auth automatically
 
-      clearInterval(timer);
-      setProgress(100); // 完成
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percent = Math.round((event.loaded / event.total) * 100)
+          setProgress(percent)
+        }
+      }
 
-      const data = await response.json()
+      xhr.onload = async () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          let data
+          try {
+             data = JSON.parse(xhr.responseText)
+          } catch (e) {
+             data = { message: '解析响应失败' }
+          }
+          
+          setResult({
+            success: true,
+            message: data.message,
+            data: data.data,
+            debug_text: data.debug_text,
+          })
+          setFile(null)
+          const fileInput = document.getElementById('file-input') as HTMLInputElement
+          if (fileInput) fileInput.value = ''
+        } else {
+          let data
+          try {
+            data = JSON.parse(xhr.responseText)
+          } catch (e) {
+            data = { error: `上传失败: ${xhr.statusText}` }
+          }
+          setResult({
+            success: false,
+            message: data.error || '导入失败',
+            debug_text: data.debug_text,
+          })
+        }
+        setUploading(false)
+        setProgress(0)
+      }
 
-      if (response.ok) {
-        setResult({
-          success: true,
-          message: data.message,
-          data: data.data,
-          debug_text: data.debug_text, 
-        })
-        setFile(null)
-        const fileInput = document.getElementById('file-input') as HTMLInputElement
-        if (fileInput) fileInput.value = ''
-      } else {
+      xhr.onerror = () => {
+        console.error('Upload error:', xhr.statusText)
         setResult({
           success: false,
-          message: data.error || '导入失败',
-          debug_text: data.debug_text,
+          message: '网络错误，上传失败',
         })
+        setUploading(false)
+        setProgress(0)
       }
+
+      xhr.send(formData)
+
     } catch (error) {
-      clearInterval(timer);
-      console.error('Upload error:', error)
+      console.error('Upload initiation error:', error)
       setResult({
         success: false,
         message: '上传失败，请重试',
       })
-    } finally {
       setUploading(false)
+      setProgress(0)
     }
   }
 
