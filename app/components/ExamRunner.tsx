@@ -403,12 +403,17 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
       // 刷新完成的部分列表
       loadCompletedSections()
 
-      // 如果有错题，显示归因弹窗
+      // 如果有错题，延迟显示归因弹窗，先让用户看到结果页面
       if (wrongQuestions.length > 0) {
-        setCurrentWrongQuestion(wrongQuestions[0])
-        setShowAttribution(true)
         // 保存 attemptId 以便后续使用
         ;(window as any).__currentAttemptId = attempt.id
+        // 自动展开详细结果，让用户立即看到错题
+        setShowResultDetail(true)
+        // 延迟 1.5 秒显示归因弹窗，让用户先看到结果
+        setTimeout(() => {
+          setCurrentWrongQuestion(wrongQuestions[0])
+          setShowAttribution(true)
+        }, 1500)
       } else {
         // 没有错题，直接完成
         if (onComplete) {
@@ -637,6 +642,7 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
                 : '发现了薄弱环节，系统已为你生成补短板计划'}
             </p>
 
+            {/* 如果有错题，自动展开详细结果 */}
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
               <button 
                 onClick={() => setShowResultDetail(true)}
@@ -644,13 +650,24 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
               >
                 查看详细结果
               </button>
-              <button 
-                onClick={() => onComplete ? onComplete() : router.push('/progress')}
-                className="rounded-lg bg-green-600 px-6 py-3 font-bold text-white hover:bg-green-700"
-              >
-                查看分析报告
-              </button>
+              {wrongCount === 0 && (
+                <button 
+                  onClick={() => onComplete ? onComplete() : router.push('/progress')}
+                  className="rounded-lg bg-green-600 px-6 py-3 font-bold text-white hover:bg-green-700"
+                >
+                  查看分析报告
+                </button>
+              )}
             </div>
+            
+            {/* 如果有错题，提示用户查看详细结果 */}
+            {wrongCount > 0 && (
+              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 text-center">
+                <p className="text-sm font-medium text-red-800">
+                  ⚠️ 你有 {wrongCount} 道题答错了，请查看详细结果了解错题情况
+                </p>
+              </div>
+            )}
           </div>
 
           {/* 详细结果视图 */}
@@ -797,19 +814,34 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
         </div>
         
         {/* 错题归因弹窗 */}
-        {showAttribution && currentWrongQuestion && (
-          <AttributionDialog
-            question={currentWrongQuestion}
-            userAnswer={userAnswers[currentWrongQuestion.id] || ''}
-            correctAnswer={currentWrongQuestion.correct_answer || ''}
-            attemptId={(window as any).__currentAttemptId || ''}
-            onComplete={handleAttributionComplete}
-            onSkip={() => {
-              setShowAttribution(false)
-              if (onComplete) onComplete()
-            }}
-          />
-        )}
+        {showAttribution && currentWrongQuestion && (() => {
+          const wrongQuestions = questions.filter(
+            (q) => userAnswers[q.id] && userAnswers[q.id] !== q.correct_answer
+          )
+          const currentWrongIndex = wrongQuestions.findIndex(
+            (q) => q.id === currentWrongQuestion.id
+          )
+          return (
+            <AttributionDialog
+              question={currentWrongQuestion}
+              userAnswer={userAnswers[currentWrongQuestion.id] || ''}
+              correctAnswer={currentWrongQuestion.correct_answer || ''}
+              attemptId={(window as any).__currentAttemptId || ''}
+              currentIndex={currentWrongIndex + 1}
+              totalCount={wrongQuestions.length}
+              onComplete={handleAttributionComplete}
+              onSkip={() => {
+                setShowAttribution(false)
+                setCurrentWrongQuestion(null)
+                if (onComplete) {
+                  setTimeout(() => {
+                    onComplete()
+                  }, 500)
+                }
+              }}
+            />
+          )
+        })()}
       </div>
     )
   }
