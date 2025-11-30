@@ -18,6 +18,7 @@ export async function POST(request: Request) {
     attemptId,
     gapType,
     gapDetail,
+    knowledgePoints = [], // 新增：知识点列表
     userAnswer,
     correctAnswer,
   } = body
@@ -35,6 +36,7 @@ export async function POST(request: Request) {
     attemptId,
     gapType,
     gapDetail,
+    knowledgePoints, // 新增：知识点列表
     userAnswer,
     correctAnswer
   )

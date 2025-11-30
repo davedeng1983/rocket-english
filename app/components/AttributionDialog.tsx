@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { Question } from '@/lib/supabase/types'
+import KnowledgePointSelector from './KnowledgePointSelector'
 
 interface AttributionDialogProps {
   question: Question
@@ -10,7 +11,7 @@ interface AttributionDialogProps {
   attemptId?: string
   currentIndex?: number // 当前错题索引（从1开始）
   totalCount?: number // 总错题数
-  onComplete: (gapType: 'vocab' | 'grammar' | 'logic', gapDetail: string, attemptId?: string) => void
+  onComplete: (gapType: 'vocab' | 'grammar' | 'logic', gapDetail: string, knowledgePoints: string[], attemptId?: string) => void
   onSkip: () => void
 }
 
@@ -26,12 +27,33 @@ export default function AttributionDialog({
 }: AttributionDialogProps) {
   const [selectedType, setSelectedType] = useState<'vocab' | 'grammar' | 'logic' | null>(null)
   const [gapDetail, setGapDetail] = useState('')
+  const [showKnowledgePoints, setShowKnowledgePoints] = useState(false) // 是否显示知识点选择
 
   const handleSubmit = () => {
     if (selectedType && gapDetail.trim()) {
-      onComplete(selectedType, gapDetail.trim(), attemptId || '')
+      // 如果有题目知识点，显示知识点选择界面
+      const questionKps = question.meta && typeof question.meta === 'object' && 'kps' in question.meta
+        ? (question.meta as any).kps
+        : []
+      
+      if (questionKps && Array.isArray(questionKps) && questionKps.length > 0) {
+        // 显示知识点选择界面
+        setShowKnowledgePoints(true)
+      } else {
+        // 没有知识点，直接完成（不选择知识点）
+        onComplete(selectedType, gapDetail.trim(), [], attemptId || '')
+        setSelectedType(null)
+        setGapDetail('')
+      }
+    }
+  }
+
+  const handleKnowledgePointsComplete = (selectedKnowledgePoints: string[]) => {
+    if (selectedType && gapDetail.trim()) {
+      onComplete(selectedType, gapDetail.trim(), selectedKnowledgePoints, attemptId || '')
       setSelectedType(null)
       setGapDetail('')
+      setShowKnowledgePoints(false)
     }
   }
 
@@ -102,7 +124,7 @@ export default function AttributionDialog({
           </div>
         </div>
 
-        {selectedType && (
+        {selectedType && !showKnowledgePoints && (
           <div className="mb-4">
             <label className="mb-2 block text-sm font-medium text-slate-700">
               {selectedType === 'vocab' && '📝 请列出具体不认识的单词：'}
@@ -129,6 +151,27 @@ export default function AttributionDialog({
           </div>
         )}
 
+        {/* 知识点选择界面 */}
+        {showKnowledgePoints && selectedType && (
+          <div className="mb-4">
+            <KnowledgePointSelector
+              gapType={selectedType}
+              gapDetail={gapDetail}
+              questionContent={String(question.content || '')}
+              questionKnowledgePoints={
+                question.meta && typeof question.meta === 'object' && 'kps' in question.meta
+                  ? (question.meta as any).kps || []
+                  : []
+              }
+              onComplete={handleKnowledgePointsComplete}
+              onSkip={() => {
+                // 跳过知识点选择，直接完成（不选择任何知识点）
+                handleKnowledgePointsComplete([])
+              }}
+            />
+          </div>
+        )}
+
         <div className="flex justify-end gap-3">
           <button
             onClick={onSkip}
@@ -136,13 +179,15 @@ export default function AttributionDialog({
           >
             跳过
           </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!selectedType || !gapDetail.trim()}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            确认
-          </button>
+          {!showKnowledgePoints && (
+            <button
+              onClick={handleSubmit}
+              disabled={!selectedType || !gapDetail.trim()}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              下一步 →
+            </button>
+          )}
         </div>
       </div>
     </div>

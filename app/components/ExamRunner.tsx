@@ -152,7 +152,7 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
   const [completedSections, setCompletedSections] = useState<Set<string>>(new Set())
   // 新增：存储每道题的实时对错状态和已归因的错题信息
   const [questionStatus, setQuestionStatus] = useState<Record<string, { isCorrect: boolean; userAnswer: string; correctAnswer: string }>>({})
-  const [pendingAttributions, setPendingAttributions] = useState<Array<{ questionId: string; gapType: 'vocab' | 'grammar' | 'logic'; gapDetail: string; userAnswer: string; correctAnswer: string }>>([])
+  const [pendingAttributions, setPendingAttributions] = useState<Array<{ questionId: string; gapType: 'vocab' | 'grammar' | 'logic'; gapDetail: string; knowledgePoints: string[]; userAnswer: string; correctAnswer: string }>>([])
   const [waitingForAttribution, setWaitingForAttribution] = useState(false) // 是否正在等待归因
 
   useEffect(() => {
@@ -456,6 +456,7 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
                 attemptId: attempt.id,
                 gapType: attr.gapType,
                 gapDetail: attr.gapDetail,
+                knowledgePoints: attr.knowledgePoints || [], // 新增：知识点列表
                 userAnswer: attr.userAnswer,
                 correctAnswer: attr.correctAnswer,
               }),
@@ -487,6 +488,7 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
   const handleAttributionComplete = async (
     gapType: 'vocab' | 'grammar' | 'logic',
     gapDetail: string,
+    knowledgePoints: string[] = [],
     attemptId?: string
   ) => {
     if (!currentWrongQuestion) return
@@ -496,6 +498,7 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
       questionId: currentWrongQuestion.id,
       gapType,
       gapDetail,
+      knowledgePoints, // 新增：知识点列表
       userAnswer: userAnswers[currentWrongQuestion.id] || '',
       correctAnswer: currentWrongQuestion.correct_answer || '',
     }

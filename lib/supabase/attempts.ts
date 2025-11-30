@@ -69,10 +69,16 @@ export async function createLearningGap(
   attemptId: string,
   gapType: 'vocab' | 'grammar' | 'logic',
   gapDetail: string,
+  knowledgePoints: string[] = [], // 新增：知识点列表
   userAnswer: string,
   correctAnswer: string
 ) {
   const supabase = await createClient()
+  
+  // 将知识点信息保存到 root_cause JSONB 字段中
+  const rootCause = knowledgePoints.length > 0
+    ? { knowledge_points: knowledgePoints }
+    : null
   
   const { data, error } = await supabase
     .from('learning_gaps')
@@ -82,6 +88,7 @@ export async function createLearningGap(
       attempt_id: attemptId,
       gap_type: gapType,
       gap_detail: gapDetail,
+      root_cause: rootCause, // 保存知识点信息
       status: 'active',
     })
     .select()
@@ -98,6 +105,7 @@ export async function createLearningGap(
         context_data: {
           user_answer: userAnswer,
           correct_answer: correctAnswer,
+          knowledge_points: knowledgePoints,
         },
       })
   }
