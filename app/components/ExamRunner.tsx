@@ -464,7 +464,7 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
                             <img 
                               {...props} 
                               className="my-4 max-h-[400px] max-w-full rounded-lg border border-slate-200 object-contain shadow-sm"
-                              onError={(e) => console.error('Image load error:', props.src?.substring(0, 50) + '...')}
+                              onError={(e) => console.error('Image load error:', typeof props.src === 'string' ? props.src.substring(0, 50) + '...' : 'Blob image')}
                             />
                           ),
                           p: ({ node, ...props }) => <p className="mb-4" {...props} />
