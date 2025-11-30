@@ -37,8 +37,10 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(arrayBuffer)
 
     // 使用 mammoth 解析 Word 文档
-    const result = await mammoth.extractRawText({ buffer })
-    const text = result.value
+    // 修改：使用 convertToHtml 以便获取图片
+    const result = await mammoth.convertToHtml({ buffer })
+    const html = result.value
+    const text = convertHtmlToTextWithImages(html)
 
     // 提取试卷信息
     const title = extractTitle(text) || file.name.replace(/\.(docx|doc)$/i, '')
@@ -135,17 +137,17 @@ export async function POST(request: Request) {
           dimension: 'application',
         })
       })
-
+      
       if (originalQuestion.knowledgeCodes.length === 0 && knowledgeCodes.length > 0) {
-      supabase
-        .from('questions')
-        .update({
-          meta: {
+          supabase
+            .from('questions')
+            .update({
+              meta: {
                 kps: knowledgeCodes,
                 article: originalQuestion.article || null
-          },
-        })
-        .eq('id', question.id)
+              },
+            })
+            .eq('id', question.id)
       }
     })
 
@@ -193,6 +195,35 @@ interface ParsedQuestion {
   sectionType: 'single_choice' | 'cloze' | 'reading' | 'writing'
   orderIndex: number
   article?: string
+}
+
+// 将 HTML 转换为 纯文本 + Markdown图片标记
+function convertHtmlToTextWithImages(html: string): string {
+    let text = html
+      // 1. 处理图片：转换为 markdown 格式
+      .replace(/<img[^>]+src="([^">]+)"[^>]*>/g, '\n\n![image]($1)\n\n')
+      // 2. 处理段落和标题：转换为换行
+      .replace(/<\/p>/g, '\n\n')
+      .replace(/<\/h[1-6]>/g, '\n\n')
+      .replace(/<\/div>/g, '\n\n')
+      // 3. 处理换行符
+      .replace(/<br\s*\/?>/g, '\n')
+      // 4. 处理表格：行转换行，单元格转空格
+      .replace(/<\/tr>/g, '\n')
+      .replace(/<\/td>/g, ' ')
+      // 5. 处理列表
+      .replace(/<\/li>/g, '\n')
+      // 6. 移除所有其他标签
+      .replace(/<[^>]+>/g, '')
+      // 7. 解码常见 HTML 实体
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+  
+    return text
 }
 
 // ... (extractTitle, extractMetadata 保持不变) ...
@@ -432,7 +463,7 @@ function parseStandardBlock(text: string, startIndex: number, type: ParsedQuesti
     if (block.length < 10 || !hasNumber || !block.includes('A')) continue
     
     const q = parseQuestionBlock(block)
-        if (q) {
+    if (q) {
         q.sectionType = type
         // 尝试从题号字符串解析数字，如果失败则递增
         let numStr = q.number
