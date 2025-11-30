@@ -408,6 +408,20 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
     'article' in currentQuestion.meta && 
     (currentQuestion.meta as any).article;
 
+  // Highlight current question number in article
+  const processedArticle = useMemo(() => {
+    const article = (currentQuestion?.meta as any)?.article;
+    if (!article || typeof article !== 'string') return '';
+    
+    const currentNum = currentIndex + 1;
+    // Regex to match: (1), （1）, [1], 1., 1．, 1, (1.5分)
+    // Also simple number if it's surrounded by non-digits (risky but needed for some formats)
+    // We look for specific markers first
+    const pattern = new RegExp(`(?<!\\d)(?:\\(\\s*${currentNum}\\s*\\)|（\\s*${currentNum}\\s*）|\\[\\s*${currentNum}\\s*\\]|${currentNum}\\s*[.．、])`, 'g');
+    
+    return article.replace(pattern, (match: string) => `\`${match}\``);
+  }, [currentQuestion, currentIndex]);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-slate-50">
       <div className={`container mx-auto px-4 py-8 ${isSplitView ? 'max-w-6xl' : 'max-w-3xl'}`}>
@@ -461,10 +475,16 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
                                         onError={(e) => console.error('Image load error:', typeof props.src === 'string' ? props.src.substring(0, 50) + '...' : 'Blob image')}
                                     />
                                 ),
-                                p: ({ node, ...props }) => <p className="mb-4" {...props} />
+                                p: ({ node, ...props }) => <p className="mb-4" {...props} />,
+                                code: ({ node, ...props }) => (
+                                    <span 
+                                        className="inline-block rounded-md border border-yellow-400 bg-yellow-200 px-1.5 py-0.5 font-bold text-yellow-900 shadow-sm" 
+                                        {...props} 
+                                    />
+                                )
                             }}
                         >
-                            {(currentQuestion.meta as any).article}
+                            {processedArticle}
                         </ReactMarkdown>
                     </div>
                 </div>
@@ -484,7 +504,9 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
                         : (currentQuestion.options ? '阅读理解' : '阅读表达')}
                     </span>
                     {/* 显示题号 */}
-                    <span className="text-sm font-bold text-slate-300">#{currentIndex + 1}</span>
+                    <span className="flex items-center justify-center rounded-md bg-blue-600 px-2.5 py-1 text-sm font-bold text-white shadow-sm">
+                        #{currentIndex + 1}
+                    </span>
                     </div>
                     
                     {/* 移动端文章显示 (或者非 Split View 时显示) */}
@@ -506,10 +528,16 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
                                     onError={(e) => console.error('Image load error:', typeof props.src === 'string' ? props.src.substring(0, 50) + '...' : 'Blob image')}
                                     />
                                 ),
-                                p: ({ node, ...props }) => <p className="mb-4" {...props} />
+                                p: ({ node, ...props }) => <p className="mb-4" {...props} />,
+                                code: ({ node, ...props }) => (
+                                    <span 
+                                        className="inline-block rounded-md border border-yellow-400 bg-yellow-200 px-1.5 py-0.5 font-bold text-yellow-900 shadow-sm" 
+                                        {...props} 
+                                    />
+                                )
                                 }}
                             >
-                                {(currentQuestion.meta as any).article}
+                                {processedArticle}
                             </ReactMarkdown>
                         </div>
                     )}
