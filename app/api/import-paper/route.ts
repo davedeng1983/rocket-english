@@ -41,8 +41,8 @@ export async function POST(request: Request) {
     const result = await mammoth.convertToHtml(
         { buffer },
         {
-            convertImage: mammoth.images.inline((element) => {
-                return element.read("base64").then((imageBuffer) => {
+            convertImage: (mammoth.images as any).inline((element: any) => {
+                return element.read("base64").then((imageBuffer: any) => {
                     return {
                         src: `data:${element.contentType};base64,${imageBuffer}`,
                     }
