@@ -135,17 +135,17 @@ export async function POST(request: Request) {
           dimension: 'application',
         })
       })
-      
+
       if (originalQuestion.knowledgeCodes.length === 0 && knowledgeCodes.length > 0) {
-          supabase
-            .from('questions')
-            .update({
-              meta: {
+      supabase
+        .from('questions')
+        .update({
+          meta: {
                 kps: knowledgeCodes,
                 article: originalQuestion.article || null
-              },
-            })
-            .eq('id', question.id)
+          },
+        })
+        .eq('id', question.id)
       }
     })
 
@@ -432,7 +432,7 @@ function parseStandardBlock(text: string, startIndex: number, type: ParsedQuesti
     if (block.length < 10 || !hasNumber || !block.includes('A')) continue
     
     const q = parseQuestionBlock(block)
-    if (q) {
+        if (q) {
         q.sectionType = type
         // 尝试从题号字符串解析数字，如果失败则递增
         let numStr = q.number
@@ -443,6 +443,30 @@ function parseStandardBlock(text: string, startIndex: number, type: ParsedQuesti
         
         q.orderIndex = !isNaN(num) ? num : ++currentOrder
         if (supportArticle) q.article = article
+
+        // 检测多篇文章：针对阅读理解，检查 Option D 后是否跟随了新文章
+        if (type === 'reading' && q.options && q.options.length === 4) {
+            const optionD = q.options[3];
+            // 按行分割，如果 Option D 包含多行，且后续内容很长，可能是新文章
+            const dLines = optionD.split('\n').map(l => l.trim()).filter(l => l);
+            
+            if (dLines.length > 1) {
+                // 假设第一行是真正的 Option D
+                const realOptionD = dLines[0];
+                // 在原始字符串中找到分割点
+                const splitIndex = optionD.indexOf(realOptionD) + realOptionD.length;
+                const potentialArticle = optionD.substring(splitIndex).trim();
+                
+                // 阈值：如果后续文本超过 50 个字符，认为是新文章
+                if (potentialArticle.length > 50) {
+                     // 修正 Option D
+                     q.options[3] = realOptionD;
+                     // 更新全局 article 变量，供后续题目使用
+                     article = potentialArticle;
+                }
+            }
+        }
+
         questions.push(q)
     }
   }
