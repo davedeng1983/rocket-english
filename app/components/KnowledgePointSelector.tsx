@@ -38,32 +38,21 @@ export default function KnowledgePointSelector({
     setLoading(true)
     
     try {
-      // 如果有题目已有的知识点，先加载它们
+      // 优先使用题目已有的知识点
       if (questionKnowledgePoints.length > 0) {
         const response = await fetch(`/api/knowledge-points?codes=${questionKnowledgePoints.join(',')}`)
         const data = await response.json()
-        if (Array.isArray(data)) {
+        if (Array.isArray(data) && data.length > 0) {
           setKnowledgePoints(data)
           setLoading(false)
           return
         }
       }
 
-      // 如果没有，或者需要更多，使用AI生成相关知识点
-      const response = await fetch('/api/generate-knowledge-points', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          gapType,
-          gapDetail,
-          questionContent,
-        }),
-      })
-
-      const data = await response.json()
-      if (data.knowledgePoints && Array.isArray(data.knowledgePoints)) {
-        setKnowledgePoints(data.knowledgePoints)
-      }
+      // 如果没有题目知识点，使用默认的知识点列表
+      // 可以根据错误类型和详情生成更精准的知识点（未来可以接入AI）
+      const defaultPoints = getDefaultKnowledgePoints(gapType)
+      setKnowledgePoints(defaultPoints)
     } catch (error) {
       console.error('Failed to load knowledge points:', error)
       // 如果失败，使用默认的知识点列表
