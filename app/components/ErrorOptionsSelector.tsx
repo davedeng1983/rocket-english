@@ -8,7 +8,11 @@ interface ErrorOptionsSelectorProps {
   questionContent: string
   questionOptions?: string[]
   correctAnswer?: string
+  userAnswer?: string // 学生的错误答案
   article?: string // 阅读理解的文章内容
+  analysis?: string // 题目解析
+  knowledgePoints?: string[] // 题目知识点
+  sectionType?: string // 题目类型
   value: string // 当前选中的值
   onChange: (value: string) => void
 }
@@ -18,7 +22,11 @@ export default function ErrorOptionsSelector({
   questionContent,
   questionOptions,
   correctAnswer,
+  userAnswer,
   article,
+  analysis,
+  knowledgePoints,
+  sectionType,
   value,
   onChange,
 }: ErrorOptionsSelectorProps) {
@@ -43,7 +51,11 @@ export default function ErrorOptionsSelector({
           questionContent,
           questionOptions,
           correctAnswer,
+          userAnswer,
           article,
+          analysis,
+          knowledgePoints,
+          sectionType,
         }),
       })
 

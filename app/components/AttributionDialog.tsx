@@ -160,11 +160,19 @@ export default function AttributionDialog({
                   : undefined
               }
               correctAnswer={correctAnswer || undefined}
+              userAnswer={userAnswer || undefined}
               article={
                 question.meta && typeof question.meta === 'object' && 'article' in question.meta
                   ? String((question.meta as any).article || '')
                   : undefined
               }
+              analysis={question.analysis || undefined}
+              knowledgePoints={
+                question.meta && typeof question.meta === 'object' && 'kps' in question.meta
+                  ? (question.meta as any).kps || []
+                  : undefined
+              }
+              sectionType={question.section_type || undefined}
               value={gapDetail}
               onChange={setGapDetail}
             />

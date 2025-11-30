@@ -14,7 +14,11 @@ interface GenerateOptionsRequest {
   questionContent: string
   questionOptions?: string[]
   correctAnswer?: string
+  userAnswer?: string // 学生的错误答案
   article?: string // 阅读理解的文章内容
+  analysis?: string // 题目解析
+  knowledgePoints?: string[] // 题目知识点
+  sectionType?: string // 题目类型：single_choice, cloze, reading, writing
 }
 
 /**
@@ -23,18 +27,79 @@ interface GenerateOptionsRequest {
 export async function POST(request: Request) {
   try {
     const body: GenerateOptionsRequest = await request.json()
-    const { gapType, questionContent, questionOptions, correctAnswer, article } = body
+    const { 
+      gapType, 
+      questionContent, 
+      questionOptions, 
+      correctAnswer, 
+      userAnswer,
+      article, 
+      analysis,
+      knowledgePoints,
+      sectionType
+    } = body
 
-    // 如果有AI，使用AI生成；否则使用规则生成
+    // 策略1：如果有题目解析，尝试从解析中提取关键信息
+    if (analysis && analysis.trim().length > 0) {
+      const extractedOptions = extractFromAnalysis(analysis, gapType, questionContent, userAnswer, correctAnswer)
+      if (extractedOptions && extractedOptions.length > 0) {
+        return NextResponse.json({ options: extractedOptions })
+      }
+    }
+
+    // 策略2：如果有知识点标签，优先使用
+    if (knowledgePoints && knowledgePoints.length > 0 && gapType !== 'logic') {
+      const kpOptions = generateFromKnowledgePoints(knowledgePoints, gapType, questionContent)
+      if (kpOptions && kpOptions.length > 0) {
+        // 如果有AI，可以进一步优化；否则直接返回
+        if (openai) {
+          const aiOptions = await generateOptionsWithAI(
+            gapType, 
+            questionContent, 
+            questionOptions, 
+            correctAnswer, 
+            userAnswer,
+            article,
+            analysis,
+            knowledgePoints,
+            sectionType
+          )
+          if (aiOptions && aiOptions.length > 0) {
+            return NextResponse.json({ options: aiOptions })
+          }
+        }
+        return NextResponse.json({ options: kpOptions })
+      }
+    }
+
+    // 策略3：如果有AI，使用AI生成（包含更多上下文）
     if (openai) {
-      const aiOptions = await generateOptionsWithAI(gapType, questionContent, questionOptions, correctAnswer, article)
+      const aiOptions = await generateOptionsWithAI(
+        gapType, 
+        questionContent, 
+        questionOptions, 
+        correctAnswer, 
+        userAnswer,
+        article,
+        analysis,
+        knowledgePoints,
+        sectionType
+      )
       if (aiOptions && aiOptions.length > 0) {
         return NextResponse.json({ options: aiOptions })
       }
     }
 
-    // 降级策略：基于规则生成选项
-    const ruleBasedOptions = generateOptionsByRules(gapType, questionContent, questionOptions, article)
+    // 策略4：降级策略：基于规则生成选项（包含错误答案分析）
+    const ruleBasedOptions = generateOptionsByRules(
+      gapType, 
+      questionContent, 
+      questionOptions, 
+      article, 
+      userAnswer, 
+      correctAnswer,
+      sectionType
+    )
     return NextResponse.json({ options: ruleBasedOptions })
   } catch (error) {
     console.error('Failed to generate error options:', error)
@@ -48,12 +113,125 @@ export async function POST(request: Request) {
 /**
  * 使用AI生成选项
  */
+/**
+ * 从题目解析中提取错误原因
+ */
+function extractFromAnalysis(
+  analysis: string,
+  gapType: 'vocab' | 'grammar' | 'logic',
+  questionContent: string,
+  userAnswer?: string,
+  correctAnswer?: string
+): Array<{ value: string; label: string }> | null {
+  const options: Array<{ value: string; label: string }> = []
+  const analysisLower = analysis.toLowerCase()
+  
+  if (gapType === 'vocab') {
+    // 从解析中提取生词
+    const vocabPatterns = [
+      /(?:单词|词汇|生词)[：:]\s*([^，,。\n]+)/g,
+      /([a-zA-Z]+)\s*（[^）)]+）/g, // 单词（中文）
+      /([a-zA-Z]+)\s*\([^)]+\)/g, // word (meaning)
+    ]
+    
+    for (const pattern of vocabPatterns) {
+      const matches = analysis.matchAll(pattern)
+      for (const match of matches) {
+        const word = match[1]?.trim()
+        if (word && word.length > 3 && !['the', 'and', 'are', 'was', 'were'].includes(word.toLowerCase())) {
+          options.push({ value: word, label: word })
+        }
+      }
+    }
+  } else if (gapType === 'grammar') {
+    // 从解析中提取语法点
+    const grammarKeywords = [
+      { pattern: /(?:时态|tense)/i, label: '时态用法不理解' },
+      { pattern: /(?:被动|passive|语态)/i, label: '被动语态不理解' },
+      { pattern: /(?:从句|clause)/i, label: '从句结构不理解' },
+      { pattern: /(?:非谓语|non-finite)/i, label: '非谓语动词用法不清楚' },
+      { pattern: /(?:虚拟|subjunctive)/i, label: '虚拟语气不理解' },
+      { pattern: /(?:情态|modal)/i, label: '情态动词用法不理解' },
+      { pattern: /(?:主谓一致|subject-verb)/i, label: '主谓一致不理解' },
+    ]
+    
+    for (const { pattern, label } of grammarKeywords) {
+      if (pattern.test(analysis)) {
+        options.push({ value: label, label })
+      }
+    }
+  } else if (gapType === 'logic') {
+    // 从解析中提取逻辑关系
+    const logicKeywords = [
+      { pattern: /(?:因果|because|since|as|so)/i, label: '因果关系不理解' },
+      { pattern: /(?:转折|but|however|although)/i, label: '转折关系不理解' },
+      { pattern: /(?:条件|if|unless)/i, label: '条件关系不理解' },
+      { pattern: /(?:推理|infer|imply|suggest)/i, label: '推理理解困难' },
+      { pattern: /(?:指代|this|that|it)/i, label: '指代关系不理解' },
+    ]
+    
+    for (const { pattern, label } of logicKeywords) {
+      if (pattern.test(analysis)) {
+        options.push({ value: label, label })
+      }
+    }
+  }
+  
+  return options.length > 0 ? options.slice(0, 5) : null
+}
+
+/**
+ * 从知识点标签生成选项
+ */
+function generateFromKnowledgePoints(
+  knowledgePoints: string[],
+  gapType: 'vocab' | 'grammar' | 'logic',
+  questionContent: string
+): Array<{ value: string; label: string }> {
+  const options: Array<{ value: string; label: string }> = []
+  
+  const kpMap: Record<string, string> = {
+    // 语法点
+    'grammar.tense': '时态用法不理解',
+    'grammar.voice': '被动语态不理解',
+    'grammar.sentence': '从句结构不理解',
+    'grammar.modal': '情态动词用法不理解',
+    'grammar.non_finite': '非谓语动词用法不清楚',
+    'grammar.subjunctive': '虚拟语气不理解',
+    'grammar.agreement': '主谓一致不理解',
+    // 词汇
+    'vocab.common': '常用词汇不理解',
+    'vocab.academic': '学术词汇不理解',
+    'vocab.collocation': '词汇搭配不理解',
+    // 逻辑
+    'logic.inference': '推理能力不足',
+    'logic.connection': '逻辑连接不理解',
+    'logic.comprehension': '理解能力不足',
+  }
+  
+  for (const kp of knowledgePoints) {
+    if (kpMap[kp]) {
+      options.push({ value: kpMap[kp], label: kpMap[kp] })
+    } else {
+      // 如果没有映射，使用知识点名称
+      const displayName = kp.replace(/\./g, ' / ').replace(/_/g, ' ')
+      options.push({ value: `${displayName}不理解`, label: `${displayName}不理解` })
+    }
+  }
+  
+  return options.slice(0, 5)
+}
+
 async function generateOptionsWithAI(
   gapType: 'vocab' | 'grammar' | 'logic',
   questionContent: string,
   questionOptions?: string[],
   correctAnswer?: string,
-  article?: string
+  userAnswer?: string,
+  article?: string,
+  analysis?: string,
+  knowledgePoints?: string[],
+  sectionType?: string
 ): Promise<Array<{ value: string; label: string }> | null> {
   if (!openai) return null
 
@@ -61,6 +239,27 @@ async function generateOptionsWithAI(
 
   if (gapType === 'vocab') {
     const isReadingComprehension = !!article && article.length > 100
+    
+    // 构建上下文信息
+    let contextInfo = ''
+    if (userAnswer && correctAnswer) {
+      contextInfo += `\n学生错误答案：${userAnswer}\n正确答案：${correctAnswer}\n`
+      if (questionOptions) {
+        const wrongOption = questionOptions.find((opt, idx) => {
+          const optionLetter = String.fromCharCode(65 + idx) // A, B, C, D
+          return userAnswer === optionLetter || userAnswer === opt
+        })
+        if (wrongOption) {
+          contextInfo += `学生选择了：${wrongOption}\n`
+        }
+      }
+    }
+    if (analysis) {
+      contextInfo += `\n题目解析：${analysis.substring(0, 500)}\n`
+    }
+    if (knowledgePoints && knowledgePoints.length > 0) {
+      contextInfo += `\n题目知识点：${knowledgePoints.join('、')}\n`
+    }
     
     if (isReadingComprehension) {
       // 阅读理解题：优先分析文章中的生词
@@ -70,15 +269,16 @@ async function generateOptionsWithAI(
 ${article.substring(0, 3000)}
 
 题目：${questionContent}
-${questionOptions ? `选项：${questionOptions.join(' | ')}` : ''}
+${questionOptions ? `选项：${questionOptions.join(' | ')}` : ''}${contextInfo}
 
 要求：
 1. **优先分析文章中的生词**：从文章中找出可能不认识的单词（排除简单词汇如 the, is, are 等）
-2. **其次分析题目和选项中的生词**：如果文章中没有足够的生词，再分析题目和选项
-3. 选择中等及以上难度的词汇，优先选择学术词汇、高级词汇
-4. 每个单词提供中文释义（放在括号内）
-5. 如果单词在文章中出现，可以标注"（文章中）"，例如："ambition（雄心，文章中）"
-6. 返回JSON格式：{"options": [{"value": "单词（中文释义）", "label": "单词（中文释义）"}]}
+2. **结合错误答案分析**：如果学生选错了，分析错误选项中可能不认识的单词
+3. **其次分析题目和选项中的生词**：如果文章中没有足够的生词，再分析题目和选项
+4. 选择中等及以上难度的词汇，优先选择学术词汇、高级词汇
+5. 每个单词提供中文释义（放在括号内）
+6. 如果单词在文章中出现，可以标注"（文章中）"，例如："ambition（雄心，文章中）"
+7. 返回JSON格式：{"options": [{"value": "单词（中文释义）", "label": "单词（中文释义）"}]}
 
 只返回JSON，不要其他文字。`
     } else {
@@ -242,7 +442,10 @@ function generateOptionsByRules(
   gapType: 'vocab' | 'grammar' | 'logic',
   questionContent: string,
   questionOptions?: string[],
-  article?: string
+  article?: string,
+  userAnswer?: string,
+  correctAnswer?: string,
+  sectionType?: string
 ): Array<{ value: string; label: string }> {
   
   if (gapType === 'vocab') {
@@ -264,6 +467,34 @@ function generateOptionsByRules(
     const fullText = `${questionContent} ${questionOptions?.join(' ') || ''}`.toLowerCase()
     
     const options: Array<{ value: string; label: string }> = []
+    
+    // 错误答案分析：如果学生选错了，分析错误选项的干扰点
+    if (userAnswer && correctAnswer && questionOptions) {
+      const userOptionIndex = userAnswer.charCodeAt(0) - 65 // A=0, B=1, C=2, D=3
+      const correctOptionIndex = correctAnswer.charCodeAt(0) - 65
+      
+      if (userOptionIndex >= 0 && userOptionIndex < questionOptions.length &&
+          correctOptionIndex >= 0 && correctOptionIndex < questionOptions.length) {
+        const wrongOption = questionOptions[userOptionIndex].toLowerCase()
+        const rightOption = questionOptions[correctOptionIndex].toLowerCase()
+        
+        // 分析错误选项和正确选项的差异
+        // 如果错误选项包含某些语法结构，可能是干扰点
+        if (wrongOption.match(/\b(was|were|is|are)\s+\w+ed\b/) && 
+            !rightOption.match(/\b(was|were|is|are)\s+\w+ed\b/)) {
+          options.push({ value: '被动语态的结构不理解', label: '被动语态的结构不理解' })
+        }
+        
+        if (wrongOption.match(/\b(can|could|may|might|must|should|would)\b/) &&
+            rightOption.match(/\b(can|could|may|might|must|should|would)\b/)) {
+          const wrongModals = wrongOption.match(/\b(can|could|may|might|must|should|would)\b/gi) || []
+          const rightModals = rightOption.match(/\b(can|could|may|might|must|should|would)\b/gi) || []
+          if (wrongModals.length > 0 && rightModals.length > 0 && wrongModals[0] !== rightModals[0]) {
+            options.push({ value: `情态动词 ${wrongModals[0]}/${rightModals[0]} 的用法和区别不理解`, label: `情态动词 ${wrongModals[0]}/${rightModals[0]} 的用法和区别不理解` })
+          }
+        }
+      }
+    }
     
     // 检查情态动词（请求许可、能力、推测等）
     if (fullText.match(/\b(can|could|may|might|must|should|would)\b/)) {
