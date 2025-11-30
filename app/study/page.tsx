@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ExamRunner from '@/app/components/ExamRunner'
 import { getCurrentUser } from '@/lib/supabase/auth'
-import { Trash2, Edit2, X, Check, PlayCircle } from 'lucide-react'
+import { Trash2, Edit2, X, Check, PlayCircle, FileEdit } from 'lucide-react'
 
 export default function StudyPage() {
   const router = useRouter()
@@ -218,6 +218,16 @@ export default function StudyPage() {
                         title="开始考试"
                       >
                         <PlayCircle size={18} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            router.push(`/editor/${paper.id}`)
+                        }}
+                        className="rounded-full bg-slate-50 p-2 text-slate-400 hover:bg-purple-50 hover:text-purple-600 opacity-0 transition-opacity group-hover:opacity-100"
+                        title="编辑题目"
+                      >
+                        <FileEdit size={18} />
                       </button>
                       <button
                         onClick={(e) => handleStartRename(e, paper)}

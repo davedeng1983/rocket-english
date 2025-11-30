@@ -61,9 +61,12 @@ export async function POST(request: Request) {
     const { questions, parsingLog } = extractQuestions(text)
 
     // 调试模式：即使成功也附带文本样本和解析日志
-    const splitPoint = Math.floor(text.length * 0.4)
+    // 注意：为了防止 Response Body 过大导致 Vercel 500 错误，需隐藏 Base64 图片数据
+    const debugSafeText = text.replace(/!\[image\]\(data:[^)]+\)/g, '![image](...base64 data hidden...)')
+    
+    const splitPoint = Math.floor(debugSafeText.length * 0.4)
     const debugText = "--- PARSING LOG ---\n" + parsingLog.join('\n') + 
-                      "\n\n--- DEBUG MODE: SHOWING LAST 60% OF TEXT ---\n" + text.substring(splitPoint)
+                      "\n\n--- DEBUG MODE: SHOWING LAST 60% OF TEXT ---\n" + debugSafeText.substring(splitPoint)
 
     if (questions.length === 0) {
       console.log('Parsed Text Sample:', text.substring(0, 1000))
