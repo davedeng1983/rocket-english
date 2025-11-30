@@ -415,12 +415,8 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
           setShowAttribution(true)
         }, 1500)
       } else {
-        // 没有错题，直接完成
-        if (onComplete) {
-          setTimeout(() => {
-            onComplete()
-          }, 2000)
-        }
+        // 没有错题，但也要显示结果页面，让用户查看
+        // 不自动调用 onComplete，让用户主动选择何时退出
       }
     } catch (error) {
       console.error('Failed to submit exam:', error)
@@ -475,16 +471,13 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
         setShowAttribution(true)
       }, 300)
     } else {
-      // 所有错题都已处理
+      // 所有错题都已处理完成
       setShowAttribution(false)
       setCurrentWrongQuestion(null)
       // 刷新完成的部分列表
       loadCompletedSections()
-      if (onComplete) {
-        setTimeout(() => {
-          onComplete()
-        }, 1000)
-      }
+      // 不自动调用 onComplete，让用户留在结果页面查看详情
+      // 用户可以主动点击"查看分析报告"按钮退出
     }
   }
 
@@ -645,19 +638,23 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
             {/* 如果有错题，自动展开详细结果 */}
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
               <button 
-                onClick={() => setShowResultDetail(true)}
+                onClick={() => setShowResultDetail(!showResultDetail)}
                 className="rounded-lg border-2 border-green-600 bg-white px-6 py-3 font-bold text-green-600 hover:bg-green-50"
               >
-                查看详细结果
+                {showResultDetail ? '收起详细结果' : '查看详细结果'}
               </button>
-              {wrongCount === 0 && (
-                <button 
-                  onClick={() => onComplete ? onComplete() : router.push('/progress')}
-                  className="rounded-lg bg-green-600 px-6 py-3 font-bold text-white hover:bg-green-700"
-                >
-                  查看分析报告
-                </button>
-              )}
+              <button 
+                onClick={() => {
+                  if (onComplete) {
+                    onComplete()
+                  } else {
+                    router.push('/progress')
+                  }
+                }}
+                className="rounded-lg bg-green-600 px-6 py-3 font-bold text-white hover:bg-green-700"
+              >
+                返回
+              </button>
             </div>
             
             {/* 如果有错题，提示用户查看详细结果 */}
@@ -833,11 +830,8 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
               onSkip={() => {
                 setShowAttribution(false)
                 setCurrentWrongQuestion(null)
-                if (onComplete) {
-                  setTimeout(() => {
-                    onComplete()
-                  }, 500)
-                }
+                // 跳过归因后，留在结果页面，让用户查看详情
+                // 用户可以主动点击按钮退出
               }}
             />
           )
@@ -1060,7 +1054,9 @@ export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRun
             onComplete={handleAttributionComplete}
             onSkip={() => {
               setShowAttribution(false)
-              if (onComplete) onComplete()
+              setCurrentWrongQuestion(null)
+              // 跳过归因后，留在结果页面，让用户查看详情
+              // 用户可以主动点击按钮退出
             }}
           />
         )
