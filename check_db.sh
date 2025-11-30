@@ -1,0 +1,20 @@
+#!/bin/bash
+
+echo "=========================================="
+echo "🔍 数据库迁移状态检查"
+echo "=========================================="
+echo ""
+echo "请按照以下步骤检查："
+echo ""
+echo "1. 打开 Supabase Dashboard: https://app.supabase.com"
+echo "2. 选择你的项目"
+echo "3. 打开 SQL Editor"
+echo "4. 复制并执行以下 SQL:"
+echo ""
+echo "----------------------------------------"
+cat supabase/migrations/check_attempt_id.sql
+echo "----------------------------------------"
+echo ""
+echo "📋 或者直接查看检查脚本文件："
+echo "   supabase/migrations/check_attempt_id.sql"
+echo ""
