@@ -38,16 +38,18 @@ export async function POST(request: Request) {
 
     // 使用 mammoth 解析 Word 文档
     // 修改：使用 convertToHtml 以便获取图片
-    const result = await mammoth.convertToHtml({ 
-        buffer,
-        convertImage: mammoth.images.inline((element) => {
-            return element.read("base64").then((imageBuffer) => {
-                return {
-                    src: `data:${element.contentType};base64,${imageBuffer}`,
-                }
-            })
-        }),
-    })
+    const result = await mammoth.convertToHtml(
+        { buffer },
+        {
+            convertImage: mammoth.images.inline((element) => {
+                return element.read("base64").then((imageBuffer) => {
+                    return {
+                        src: `data:${element.contentType};base64,${imageBuffer}`,
+                    }
+                })
+            }),
+        }
+    )
     const html = result.value
     const text = convertHtmlToTextWithImages(html)
 
@@ -449,26 +451,38 @@ function scanForOptions(text: string, startIndex: number, startNumber: number): 
 function parseStandardBlock(text: string, startIndex: number, type: ParsedQuestion['sectionType'], supportArticle = false): ParsedQuestion[] {
   const questions: ParsedQuestion[] = []
   let currentOrder = startIndex
+  
+  // 动态提取文章：积累直到遇到第一个有效题目
   let article = ''
-  let contentText = text
-
-  if (supportArticle) {
-      const firstQuestionIndex = text.search(/\d+[.．、]\s*[（(]?\s*\d*\.?\d*\s*分?[）)]?.*A[.．、]/)
-      if (firstQuestionIndex !== -1) {
-          article = text.substring(0, firstQuestionIndex).trim()
-          contentText = text.substring(firstQuestionIndex)
-      }
-  }
+  let articleBuffer: string[] = []
+  let foundFirstQuestion = false
 
   // 宽松的题号分割：支持 (1), ①, [1], 1., 1、 等格式
   // 关键更新：增强了分割正则
   const questionSplitPattern = /(?=(?:^|\n)\s*(?:\d+[.．、]|[（(]\d+[）)]|\[\d+\]|①|②|③|④|⑤|⑥|⑦|⑧|⑨|⑩))/g
-  const rawBlocks = contentText.split(questionSplitPattern)
+  const rawBlocks = text.split(questionSplitPattern)
 
   for (const block of rawBlocks) {
     // 必须包含 A. B. C. D. 选项才算标准题
     // 检查是否有题号
     const hasNumber = block.match(/(?:^|\n)\s*(?:(\d+)[.．、]|[（(](\d+)[）)]|\[(\d+)\]|(①|②|③|④|⑤|⑥|⑦|⑧|⑨|⑩))/)
+    // 简单的选项检查 (至少包含 A. 和 B.)
+    const hasOptions = block.includes('A') && (block.includes('B') || block.includes('C'))
+
+    // 如果支持文章且还没找到第一题，且当前块不像题目，归入文章
+    if (supportArticle && !foundFirstQuestion) {
+         if (hasNumber && hasOptions && block.length > 10) {
+             foundFirstQuestion = true;
+             // 如果有累积的文章内容，合并
+             if (articleBuffer.length > 0) {
+                 article = articleBuffer.join('')
+             }
+         } else {
+             articleBuffer.push(block)
+             continue
+         }
+    }
+
     if (block.length < 10 || !hasNumber || !block.includes('A')) continue
     
     const q = parseQuestionBlock(block)
