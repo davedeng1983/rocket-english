@@ -30,6 +30,10 @@ export default function ImportPage() {
     }
   }
 
+  const [progress, setProgress] = useState(0)
+
+  // ...
+
   const handleUpload = async () => {
     if (!file) {
       alert('请先选择文件')
@@ -44,7 +48,20 @@ export default function ImportPage() {
     }
 
     setUploading(true)
+    setProgress(0) // 重置进度
     setResult(null)
+
+    // 模拟进度条 (因为 fetch 不支持原生的上传进度，除非用 XHR)
+    // 这是一个视觉欺骗，让用户感觉系统在工作
+    const timer = setInterval(() => {
+      setProgress((oldProgress) => {
+        if (oldProgress === 100) {
+          return 100;
+        }
+        const diff = Math.random() * 10;
+        return Math.min(oldProgress + diff, 95);
+      });
+    }, 500);
 
     try {
       const formData = new FormData()
@@ -55,6 +72,9 @@ export default function ImportPage() {
         body: formData,
       })
 
+      clearInterval(timer);
+      setProgress(100); // 完成
+
       const data = await response.json()
 
       if (response.ok) {
@@ -62,10 +82,9 @@ export default function ImportPage() {
           success: true,
           message: data.message,
           data: data.data,
-          debug_text: data.debug_text, // 关键：成功时也保存 debug_text
+          debug_text: data.debug_text, 
         })
         setFile(null)
-        // 重置文件输入
         const fileInput = document.getElementById('file-input') as HTMLInputElement
         if (fileInput) fileInput.value = ''
       } else {
@@ -76,6 +95,7 @@ export default function ImportPage() {
         })
       }
     } catch (error) {
+      clearInterval(timer);
       console.error('Upload error:', error)
       setResult({
         success: false,
@@ -125,9 +145,17 @@ export default function ImportPage() {
           <button
             onClick={handleUpload}
             disabled={!file || uploading}
-            className="w-full rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="relative w-full overflow-hidden rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {uploading ? '上传中...' : '开始导入'}
+            {uploading && (
+              <div 
+                className="absolute left-0 top-0 h-full bg-blue-500 transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            )}
+            <span className="relative z-10">
+              {uploading ? `正在解析中... ${Math.round(progress)}%` : '开始导入'}
+            </span>
           </button>
 
           {/* 结果提示 */}
