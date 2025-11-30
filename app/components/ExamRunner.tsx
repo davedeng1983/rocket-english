@@ -21,6 +21,7 @@ import {
 
 interface ExamRunnerProps {
   paperId: string
+  sectionType?: string // 可选：指定只做某个部分的题目（'single_choice', 'cloze', 'reading', 'writing'）
   onComplete?: () => void
 }
 
@@ -135,7 +136,7 @@ function HighlightedArticle({ content, questionNumber }: { content: string; ques
   );
 }
 
-export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
+export default function ExamRunner({ paperId, sectionType, onComplete }: ExamRunnerProps) {
   const router = useRouter()
   const [paper, setPaper] = useState<any>(null)
   const [questions, setQuestions] = useState<Question[]>([])
@@ -148,10 +149,27 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
   const [score, setScore] = useState<number | null>(null)
   const [viewState, setViewState] = useState<'overview' | 'running' | 'result' | 'result_detail'>('overview')
   const [showResultDetail, setShowResultDetail] = useState(false)
+  const [completedSections, setCompletedSections] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     loadExamData()
+    loadCompletedSections()
   }, [paperId])
+
+  const loadCompletedSections = async () => {
+    const { user } = await getCurrentUser()
+    if (!user) return
+
+    try {
+      const response = await fetch(`/api/exam-papers/${paperId}/completed-sections`)
+      const data = await response.json()
+      if (data.completedSections) {
+        setCompletedSections(new Set(data.completedSections))
+      }
+    } catch (error) {
+      console.error('Failed to load completed sections:', error)
+    }
+  }
 
   const loadExamData = async () => {
     // 检查用户登录
@@ -173,10 +191,23 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
 
       if (paperData && !paperData.error) setPaper(paperData)
       if (questionsData && Array.isArray(questionsData)) {
-        setQuestions(questionsData)
+        // 如果指定了 sectionType，只加载该部分的题目
+        let filteredQuestions = questionsData
+        if (sectionType) {
+          filteredQuestions = questionsData.filter((q: Question) => q.section_type === sectionType)
+          // 如果指定了部分但没有题目，直接开始整卷
+          if (filteredQuestions.length === 0) {
+            filteredQuestions = questionsData
+          } else {
+            // 如果指定了部分，跳过概览页面，直接开始考试
+            setViewState('running')
+          }
+        }
+        
+        setQuestions(filteredQuestions)
         // 初始化答案记录
         const initialAnswers: Record<string, string> = {}
-        questionsData.forEach((q: Question) => {
+        filteredQuestions.forEach((q: Question) => {
           initialAnswers[q.id] = ''
         })
         setUserAnswers(initialAnswers)
@@ -234,11 +265,55 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
     return groups
   }, [questions])
 
-  const handleStartExam = (startIndex: number = 0) => {
-    // 确保索引有效
-    const safeIndex = Math.max(0, Math.min(startIndex, questions.length - 1))
-    setCurrentIndex(safeIndex)
-    setViewState('running')
+  const handleStartExam = (startIndex: number = 0, sectionType?: string) => {
+    // 如果指定了 sectionType，需要重新加载只包含该部分的题目
+    if (sectionType) {
+      // 重新加载数据，这次只加载该部分
+      loadExamDataForSection(sectionType)
+    } else {
+      // 确保索引有效
+      const safeIndex = Math.max(0, Math.min(startIndex, questions.length - 1))
+      setCurrentIndex(safeIndex)
+      setViewState('running')
+    }
+  }
+
+  const loadExamDataForSection = async (sectionType: string) => {
+    const { user } = await getCurrentUser()
+    if (!user) {
+      router.push('/auth/login?redirect=/study')
+      return
+    }
+
+    try {
+      const [paperResponse, questionsResponse] = await Promise.all([
+        fetch(`/api/exam-papers/${paperId}`),
+        fetch(`/api/questions?paperId=${paperId}`),
+      ])
+
+      const paperData = await paperResponse.json()
+      const questionsData = await questionsResponse.json()
+
+      if (paperData && !paperData.error) setPaper(paperData)
+      if (questionsData && Array.isArray(questionsData)) {
+        // 只加载指定部分的题目
+        const sectionQuestions = questionsData.filter((q: Question) => q.section_type === sectionType)
+        setQuestions(sectionQuestions)
+        
+        // 初始化答案记录
+        const initialAnswers: Record<string, string> = {}
+        sectionQuestions.forEach((q: Question) => {
+          initialAnswers[q.id] = ''
+        })
+        setUserAnswers(initialAnswers)
+        
+        // 直接开始考试
+        setCurrentIndex(0)
+        setViewState('running')
+      }
+    } catch (error) {
+      console.error('Failed to load exam data:', error)
+    }
   }
 
   const handleSelectAnswer = (answer: string) => {
@@ -286,12 +361,23 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
 
     // 创建考试记录（使用 API 路由）
     try {
+      // 确定当前的 sectionType：如果 questions 都是同一个类型，则使用该类型；否则使用 'full'
+      let currentSectionType = 'full'
+      if (questions.length > 0) {
+        const firstSectionType = questions[0].section_type
+        const allSameType = questions.every(q => q.section_type === firstSectionType)
+        if (allSameType && firstSectionType) {
+          currentSectionType = firstSectionType
+        }
+      }
+
       const response = await fetch('/api/exam-attempts/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           paperId,
           userAnswers,
+          sectionType: sectionType || currentSectionType, // 使用确定的 sectionType
         }),
       })
 
@@ -313,6 +399,9 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
       setScore(Math.round((correctCount! / totalQuestions!) * 100))
       setExamCompleted(true)
       setViewState('result')
+      
+      // 刷新完成的部分列表
+      loadCompletedSections()
 
       // 如果有错题，显示归因弹窗
       if (wrongQuestions.length > 0) {
@@ -384,6 +473,8 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
       // 所有错题都已处理
       setShowAttribution(false)
       setCurrentWrongQuestion(null)
+      // 刷新完成的部分列表
+      loadCompletedSections()
       if (onComplete) {
         setTimeout(() => {
           onComplete()
@@ -432,30 +523,58 @@ export default function ExamRunner({ paperId, onComplete }: ExamRunnerProps) {
         <div className="container mx-auto mt-8 max-w-3xl px-4">
           <h2 className="mb-4 text-lg font-semibold text-slate-800">试卷结构</h2>
           <div className="space-y-4">
-            {sections.map((section, idx) => (
-              <div 
-                key={section.id}
-                className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-300 hover:shadow-md"
-                onClick={() => handleStartExam(section.startIndex)}
-              >
-                <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-                    <section.icon size={20} />
+            {sections.map((section, idx) => {
+              const sectionType = section.questions[0]?.section_type
+              const isCompleted = sectionType && completedSections.has(sectionType)
+              
+              return (
+                <div 
+                  key={section.id}
+                  className={`flex cursor-pointer items-center justify-between rounded-xl border-2 p-5 shadow-sm transition hover:shadow-md ${
+                    isCompleted
+                      ? 'border-green-200 bg-green-50'
+                      : 'border-slate-200 bg-white hover:border-blue-300'
+                  }`}
+                  onClick={() => handleStartExam(section.startIndex, sectionType || undefined)}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={`flex h-10 w-10 items-center justify-center rounded-full ${
+                      isCompleted ? 'bg-green-100 text-green-600' : 'bg-blue-50 text-blue-600'
+                    }`}>
+                      {isCompleted ? (
+                        <CheckCircle2 size={20} />
+                      ) : (
+                        <section.icon size={20} />
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-slate-900">{section.title}</h3>
+                        {isCompleted && (
+                          <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                            已完成
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-slate-500">
+                        {section.questions.length} 道题 
+                        <span className="mx-2 text-slate-300">|</span>
+                        第 {section.startIndex + 1} - {section.startIndex + section.questions.length} 题
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-bold text-slate-900">{section.title}</h3>
-                    <p className="text-sm text-slate-500">
-                      {section.questions.length} 道题 
-                      <span className="mx-2 text-slate-300">|</span>
-                      第 {section.startIndex + 1} - {section.startIndex + section.questions.length} 题
-                    </p>
+                  <div className={`rounded-full p-2 ${
+                    isCompleted ? 'bg-green-100 text-green-600' : 'bg-slate-50 text-slate-400'
+                  }`}>
+                    {isCompleted ? (
+                      <CheckCircle2 size={20} />
+                    ) : (
+                      <Play size={20} className="ml-0.5" />
+                    )}
                   </div>
                 </div>
-                <div className="rounded-full bg-slate-50 p-2 text-slate-400">
-                   <Play size={20} className="ml-0.5" />
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           {/* 开始按钮 */}

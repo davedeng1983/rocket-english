@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS user_exam_attempts (
   paper_id UUID REFERENCES exam_papers(id) ON DELETE CASCADE NOT NULL,
   score INTEGER,
   user_answers JSONB, -- 记录用户选了什么
+  section_type TEXT, -- 记录是哪个部分的考试：'single_choice', 'cloze', 'reading', 'writing', 'full' (整卷)
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -104,6 +105,7 @@ CREATE TABLE IF NOT EXISTS user_exam_attempts (
 CREATE INDEX IF NOT EXISTS idx_attempts_user ON user_exam_attempts(user_id);
 CREATE INDEX IF NOT EXISTS idx_attempts_paper ON user_exam_attempts(paper_id);
 CREATE INDEX IF NOT EXISTS idx_attempts_created_at ON user_exam_attempts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_attempts_section ON user_exam_attempts(paper_id, user_id, section_type);
 
 -- ============================================
 -- 5. 漏洞表 (MVP: 记录错题归因 - 闭环的关键)

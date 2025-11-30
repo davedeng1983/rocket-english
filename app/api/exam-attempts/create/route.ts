@@ -13,7 +13,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
-  const { paperId, userAnswers } = body
+  const { paperId, userAnswers, sectionType } = body
 
   if (!paperId || !userAnswers) {
     return NextResponse.json(
@@ -25,7 +25,8 @@ export async function POST(request: Request) {
   const { data, error, correctCount, totalQuestions } = await createExamAttempt(
     user.id,
     paperId,
-    userAnswers
+    userAnswers,
+    sectionType || 'full' // 默认为整卷
   )
 
   if (error) {

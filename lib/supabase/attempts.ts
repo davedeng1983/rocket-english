@@ -11,15 +11,23 @@ import type { UserExamAttempt, LearningGap } from './types'
 export async function createExamAttempt(
   userId: string,
   paperId: string,
-  userAnswers: Record<string, string>
+  userAnswers: Record<string, string>,
+  sectionType: string = 'full' // 默认整卷
 ) {
   const supabase = await createClient()
   
-  // 先获取试卷的所有题目来计算分数
-  const { data: questions } = await supabase
+  // 根据 sectionType 获取题目来计算分数
+  // 如果是部分考试，只计算该部分的题目；如果是整卷，计算所有题目
+  let query = supabase
     .from('questions')
     .select('id, correct_answer')
     .eq('paper_id', paperId)
+  
+  if (sectionType && sectionType !== 'full') {
+    query = query.eq('section_type', sectionType)
+  }
+  
+  const { data: questions } = await query
 
   if (!questions) {
     return { data: null, error: { message: '无法获取题目' } }
@@ -44,6 +52,7 @@ export async function createExamAttempt(
       paper_id: paperId,
       score,
       user_answers: userAnswers,
+      section_type: sectionType, // 记录是哪个部分的考试
     })
     .select()
     .single()
