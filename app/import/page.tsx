@@ -10,6 +10,7 @@ export default function ImportPage() {
   const [uploading, setUploading] = useState(false)
   const [enableImages, setEnableImages] = useState(true) // New state for image toggle
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [result, setResult] = useState<{
     success: boolean
     message: string
     data?: any
@@ -31,7 +32,7 @@ export default function ImportPage() {
     }
   }
 
-  const [progress, setProgress] = useState(0)
+  // const [progress, setProgress] = useState(0) // Removed in favor of uploadProgress
 
   // ...
 
@@ -48,7 +49,7 @@ export default function ImportPage() {
     }
 
     setUploading(true)
-    setProgress(0)
+    setUploadProgress(0)
     setResult(null)
 
     try {
@@ -64,7 +65,7 @@ export default function ImportPage() {
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) {
           const percent = Math.round((event.loaded / event.total) * 100)
-          setProgress(percent)
+          setUploadProgress(percent)
         }
       }
 
@@ -100,7 +101,7 @@ export default function ImportPage() {
           })
         }
         setUploading(false)
-        setProgress(0)
+        setUploadProgress(0)
       }
 
       xhr.onerror = () => {
@@ -110,7 +111,7 @@ export default function ImportPage() {
           message: '网络错误，上传失败',
         })
         setUploading(false)
-        setProgress(0)
+        setUploadProgress(0)
       }
 
       xhr.send(formData)
@@ -122,7 +123,7 @@ export default function ImportPage() {
         message: '上传失败，请重试',
       })
       setUploading(false)
-      setProgress(0)
+      setUploadProgress(0)
     }
   }
 
@@ -188,12 +189,12 @@ export default function ImportPage() {
             {uploading && (
               <div 
                 className="absolute left-0 top-0 h-full bg-blue-500 transition-all duration-300"
-                style={{ width: `${progress}%` }}
+                style={{ width: `${uploadProgress}%` }}
               />
             )}
             <span className="relative z-10">
               {uploading 
-                ? (progress === 100 ? '正在解析试卷(含图片可能较慢)...' : `上传中... ${Math.round(progress)}%`) 
+                ? (uploadProgress === 100 ? '正在解析试卷(含图片可能较慢)...' : `上传中... ${Math.round(uploadProgress)}%`) 
                 : '开始导入'
               }
             </span>
