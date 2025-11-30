@@ -175,11 +175,17 @@ export default function ImportPage() {
               {/* Debug Text Display - Always show if present */}
               {result.debug_text && (
                 <div className="mt-4">
-                   <p className="mb-1 text-xs font-semibold text-gray-700">🔍 解析日志与文本 (调试用):</p>
-                   <pre className="max-h-60 overflow-y-auto rounded bg-gray-800 p-3 text-xs text-green-400 whitespace-pre-wrap break-all font-mono">
-                     {result.debug_text}
-                   </pre>
-                   <p className="mt-1 text-xs text-gray-500">如果题目数量不对，请将上方黑框内的内容复制给开发者。</p>
+                   <details className="group">
+                     <summary className="mb-1 cursor-pointer text-xs font-semibold text-gray-700 hover:text-blue-600">
+                       ▶️ 查看解析日志与文本 (调试用)
+                     </summary>
+                     <div className="mt-2">
+                        <pre className="max-h-60 overflow-y-auto rounded bg-gray-800 p-3 text-xs text-green-400 whitespace-pre-wrap break-all font-mono">
+                          {result.debug_text}
+                        </pre>
+                        <p className="mt-1 text-xs text-gray-500">如果题目数量不对，请将上方黑框内的内容复制给开发者。</p>
+                     </div>
+                   </details>
                 </div>
               )}
 
